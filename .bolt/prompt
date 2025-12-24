@@ -14,4 +14,6 @@ When fetching data, DO NOT use useEffect. use useQuery from @tanstack/react-quer
 
 DO NOT use React Context ever, If you want shared state use a custom hook is the compoennts are far apart or lift state up if the components are siblings
 
-For AI generation, DO NOT EVER use gemini-1.5-flash. ALWAYS use gemini-2.5-flash
+For AI generation, if you are using Google models, DO NOT EVER use gemini-1.5-flash. ALWAYS use gemini-2.5-flash.
+
+For AI integrations always use the Vercel AI SDK, do not use provider SDKs directly
