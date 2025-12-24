@@ -8,6 +8,14 @@ export class IdeaGeneratorAgent implements Agent {
   description = 'Generates 200+ scroll-stopping content ideas using contrarian, results-focused, pain point, and transformation strategies';
   modelConfig: AIModelConfig = AI_MODELS.GOOGLE_FLASH;
 
+  private getModelForPlatform(platform: string): AIModelConfig {
+    const platformLower = platform.toLowerCase();
+    if (platformLower === 'twitter' || platformLower === 'linkedin') {
+      return AI_MODELS.GROK_REASONING;
+    }
+    return this.modelConfig;
+  }
+
   async execute(context: AgentContext, onProgress?: ProgressCallback): Promise<IdeaGeneratorResult> {
     const { niche, subNiche, targetAudience, platforms, contentPillars } = context;
 
@@ -53,8 +61,10 @@ export class IdeaGeneratorAgent implements Agent {
             contentPillars,
           });
 
+          const modelToUse = this.getModelForPlatform(platform);
+
           const response = await generateWithModel(
-            this.modelConfig,
+            modelToUse,
             prompt,
             'You are an expert content strategist. Return ONLY valid JSON arrays of content ideas. No markdown, no explanations.'
           );

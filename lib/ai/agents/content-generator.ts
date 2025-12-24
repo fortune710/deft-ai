@@ -9,6 +9,14 @@ export class ContentGeneratorAgent implements Agent {
   description = 'Generates platform-specific, scroll-stopping content for each selected idea';
   modelConfig: AIModelConfig = AI_MODELS.GOOGLE_FLASH;
 
+  private getModelForPlatform(platform: string): AIModelConfig {
+    const platformLower = platform.toLowerCase();
+    if (platformLower === 'twitter' || platformLower === 'linkedin') {
+      return AI_MODELS.GROK_NON_REASONING;
+    }
+    return this.modelConfig;
+  }
+
   async execute(
     context: AgentContext,
     onProgress?: ProgressCallback,
@@ -100,8 +108,10 @@ export class ContentGeneratorAgent implements Agent {
       context.targetAudience
     );
 
+    const modelToUse = this.getModelForPlatform(idea.platform);
+
     const response = await generateWithModel(
-      this.modelConfig,
+      modelToUse,
       prompt,
       'You are an expert content creator. Return ONLY valid JSON with content and metadata. No markdown, no explanations.'
     );

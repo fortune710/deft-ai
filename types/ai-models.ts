@@ -1,10 +1,10 @@
 export type AIModelProvider = 'google' | 'grok';
 
 export type AIModelName =
-  | 'gemini-2.0-flash-exp'
-  | 'gemini-1.5-pro'
-  | 'grok-beta'
-  | 'grok-2-latest';
+  | 'gemini-2.5-flash'
+  | 'gemini-2.5-pro'
+  | 'grok-4.1-fast-reasoning'
+  | 'grok-4.1-fast-non-reasoning';
 
 export interface AIModelConfig {
   provider: AIModelProvider;
@@ -36,22 +36,22 @@ export interface StreamingAIModelResponse {
 export const AI_MODELS = {
   GOOGLE_FLASH: {
     provider: 'google' as AIModelProvider,
-    model: 'gemini-2.0-flash-exp' as AIModelName,
+    model: 'gemini-2.5-flash' as AIModelName,
     temperature: 0.7,
   },
   GOOGLE_PRO: {
     provider: 'google' as AIModelProvider,
-    model: 'gemini-1.5-pro' as AIModelName,
+    model: 'gemini-2.5-pro' as AIModelName,
     temperature: 0.7,
   },
-  GROK_BETA: {
+  GROK_REASONING: {
     provider: 'grok' as AIModelProvider,
-    model: 'grok-beta' as AIModelName,
+    model: 'grok-4.1-fast-reasoning' as AIModelName,
     temperature: 0.7,
   },
-  GROK_2: {
+  GROK_NON_REASONING: {
     provider: 'grok' as AIModelProvider,
-    model: 'grok-2-latest' as AIModelName,
+    model: 'grok-4.1-fast-non-reasoning' as AIModelName,
     temperature: 0.7,
   },
 } as const;

@@ -7,6 +7,14 @@ export class IdeaReviewerAgent implements Agent {
   description = 'Scores and selects the best 30 ideas based on engagement potential, specificity, contrarian angle, results-focus, and platform fit';
   modelConfig: AIModelConfig = AI_MODELS.GOOGLE_FLASH;
 
+  private getModelForPlatform(platform: string): AIModelConfig {
+    const platformLower = platform.toLowerCase();
+    if (platformLower === 'twitter' || platformLower === 'linkedin') {
+      return AI_MODELS.GROK_REASONING;
+    }
+    return this.modelConfig;
+  }
+
   async execute(
     context: AgentContext,
     onProgress?: ProgressCallback,
@@ -81,8 +89,15 @@ export class IdeaReviewerAgent implements Agent {
   private async scoreBatch(batch: ContentIdea[], context: AgentContext): Promise<ScoredContentIdea[]> {
     const prompt = this.buildScoringPrompt(batch, context);
 
+    const hasTwitterOrLinkedIn = batch.some(idea => {
+      const platform = idea.platform.toLowerCase();
+      return platform === 'twitter' || platform === 'linkedin';
+    });
+
+    const modelToUse = hasTwitterOrLinkedIn ? AI_MODELS.GROK_REASONING : this.modelConfig;
+
     const response = await generateWithModel(
-      this.modelConfig,
+      modelToUse,
       prompt,
       'You are an expert content strategist. Score content ideas objectively based on engagement potential. Return ONLY valid JSON.'
     );
