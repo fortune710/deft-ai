@@ -51,11 +51,11 @@ type FormData = z.infer<typeof createContentPlanSchema>;
 export function GeneratePlanDialog({ open, onOpenChange, onSuccess }: GeneratePlanDialogProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [progressMessage, setProgressMessage] = useState('');
+  const [progressDetails, setProgressDetails] = useState('');
+  const [currentAgent, setCurrentAgent] = useState('');
 
   const { profile } = useContentProfile();
-  const createPlan = useCreatePlan();
-  const batchCreateItems = useBatchCreateContentItems();
-  const generateContent = useGenerateContentPlan();
 
   const {
     register,
@@ -105,72 +105,76 @@ export function GeneratePlanDialog({ open, onOpenChange, onSuccess }: GeneratePl
     }
 
     setIsGenerating(true);
-    setProgress(10);
+    setProgress(0);
+    setProgressMessage('Starting content generation');
+    setProgressDetails('');
+    setCurrentAgent('Orchestrator');
 
     try {
-      toast.info('Analyzing your profile...');
-      setProgress(20);
-
-      const generatedItems = await generateContent.mutateAsync({
-        userProfile: profile,
-        startDate: data.start_date,
-        platforms: data.platforms,
+      const response = await fetch('/api/content/generate-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          planName: data.title || `Content Plan - ${format(data.start_date, 'MMMM yyyy')}`,
+          platforms: data.platforms,
+        }),
       });
 
-      if (!generatedItems || generatedItems.length === 0) {
-        throw new Error('No content items were generated');
+      if (!response.ok) {
+        throw new Error('Failed to start content generation');
       }
 
-      toast.info('Creating content plan...');
-      setProgress(50);
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
 
-      const endDate = addDays(data.start_date, 30);
-      const newPlan = await createPlan.mutateAsync({
-        title: data.title || `Content Plan - ${format(data.start_date, 'MMMM yyyy')}`,
-        start_date: format(data.start_date, 'yyyy-MM-dd'),
-        end_date: format(endDate, 'yyyy-MM-dd'),
-        platforms: data.platforms,
-      });
-
-      if (!newPlan || !newPlan.id) {
-        throw new Error('Failed to create plan');
+      if (!reader) {
+        throw new Error('No response stream available');
       }
 
-      toast.info('Adding content items...');
-      setProgress(75);
+      let buffer = '';
 
-      const itemsToCreate = generatedItems.map((item) => ({
-        plan_id: newPlan.id,
-        title: item.title,
-        description: item.description,
-        platform: item.platform,
-        scheduled_date: item.scheduled_date,
-        status: 'idea' as const,
-        content: item.content,
-        position: 0,
-      }));
+      while (true) {
+        const { done, value } = await reader.read();
 
-      await batchCreateItems.mutateAsync(itemsToCreate);
+        if (done) break;
 
-      setProgress(100);
-      toast.success(`Generated ${generatedItems.length} content ideas!`);
-      onOpenChange(false);
-      onSuccess(newPlan.id);
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = JSON.parse(line.slice(6));
+
+            if (data.error) {
+              throw new Error(data.message);
+            }
+
+            setProgress(data.progress);
+            setProgressMessage(data.message);
+            setProgressDetails(data.details || '');
+            if (data.agent) {
+              setCurrentAgent(data.agent);
+            }
+
+            if (data.phase === 'complete' && data.contentPlan) {
+              toast.success('Content plan created successfully!');
+              onOpenChange(false);
+              onSuccess(data.contentPlan.id);
+              return;
+            }
+          }
+        }
+      }
     } catch (error: any) {
       console.error('Error generating plan:', error);
-
-      if (error?.message?.includes('API key')) {
-        toast.error('API configuration error. Please check your settings.');
-      } else if (error?.message?.includes('network')) {
-        toast.error('Network error. Please check your connection and try again.');
-      } else if (error?.message) {
-        toast.error(`Error: ${error.message}`);
-      } else {
-        toast.error('Failed to generate content plan. Please try again.');
-      }
+      toast.error(error?.message || 'Failed to generate content plan');
     } finally {
       setIsGenerating(false);
       setProgress(0);
+      setProgressMessage('');
+      setProgressDetails('');
+      setCurrentAgent('');
     }
   };
 
@@ -192,20 +196,46 @@ export function GeneratePlanDialog({ open, onOpenChange, onSuccess }: GeneratePl
             <div className="flex items-center justify-center">
               <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
             </div>
-            <div className="text-center space-y-2">
-              <p className="font-semibold">Generating your content plan...</p>
-              <div className="w-full bg-gray-200 rounded-full h-2">
+            <div className="text-center space-y-3">
+              {currentAgent && (
+                <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-100 dark:bg-blue-900/30 rounded-full text-sm font-medium text-blue-700 dark:text-blue-300">
+                  <Sparkles className="h-4 w-4" />
+                  {currentAgent}
+                </div>
+              )}
+              <p className="font-semibold text-lg">{progressMessage}</p>
+              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
                 <div
-                  className="bg-blue-600 h-2 rounded-full transition-all duration-500"
+                  className="bg-blue-600 h-3 rounded-full transition-all duration-500"
                   style={{ width: `${progress}%` }}
                 />
               </div>
-              <p className="text-sm text-gray-600">
-                {progress < 30 && 'Analyzing your profile...'}
-                {progress >= 30 && progress < 60 && 'Generating content ideas...'}
-                {progress >= 60 && progress < 90 && 'Creating content plan...'}
-                {progress >= 90 && 'Finalizing...'}
-              </p>
+              <div className="flex items-center justify-between text-xs text-gray-500">
+                <span>{Math.round(progress)}%</span>
+                <span>Step {Math.ceil(progress / 33)} of 3</span>
+              </div>
+              {progressDetails && (
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+                  {progressDetails}
+                </p>
+              )}
+              <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg text-left space-y-2">
+                <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">What's happening:</p>
+                <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
+                  <p className={progress >= 0 && progress < 45 ? 'font-semibold text-blue-600' : ''}>
+                    ✓ Agent 1: Generating 200+ scroll-stopping ideas
+                  </p>
+                  <p className={progress >= 45 && progress < 65 ? 'font-semibold text-blue-600' : ''}>
+                    {progress >= 45 ? '✓' : '○'} Agent 2: Scoring and selecting best 30
+                  </p>
+                  <p className={progress >= 65 && progress < 95 ? 'font-semibold text-blue-600' : ''}>
+                    {progress >= 65 ? '✓' : '○'} Agent 3: Creating platform-specific content
+                  </p>
+                  <p className={progress >= 95 ? 'font-semibold text-blue-600' : ''}>
+                    {progress >= 95 ? '✓' : '○'} Saving to your content calendar
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         ) : (
