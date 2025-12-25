@@ -3,7 +3,7 @@ import { IdeaGeneratorAgent } from '../agents/idea-generator';
 import { IdeaReviewerAgent } from '../agents/idea-reviewer';
 import { ContentGeneratorAgent } from '../agents/content-generator';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { ContentPlan, ContentItem } from '@/types/content-engine';
+import { ContentPlan, ContentItem, ContentItemFormData, ItemStatus } from '@/types/content-engine';
 
 interface OrchestratorConfig {
   userId: string;
@@ -178,12 +178,20 @@ export class ContentPlanOrchestrator {
   ): Promise<ContentPlan> {
     const supabase = await createServerSupabaseClient();
 
+    await supabase.from('content_plans')
+    .update({
+      is_active: false,
+      archived_at: new Date().toISOString(),
+    })
+    .eq('user_id', userId)
+    .eq('is_active', true);
+
     const { data: plan, error: planError } = await supabase
       .from('content_plans')
       .insert({
         user_id: userId,
-        name: planName,
-        status: 'active',
+        title: planName,
+        is_active: true,
         start_date: generatedContent[0]?.scheduledDate || new Date(),
         end_date: generatedContent[generatedContent.length - 1]?.scheduledDate || new Date(),
       })
@@ -194,16 +202,16 @@ export class ContentPlanOrchestrator {
       throw new Error(`Failed to create content plan: ${planError?.message}`);
     }
 
+    console.log('generatedContent', generatedContent);
+
     const items = generatedContent.map((content) => ({
       plan_id: plan.id,
       title: content.idea.title,
       content: content.content,
       platform: content.platform,
-      content_pillar: content.idea.contentPillar,
-      status: 'draft' as const,
+      status: 'idea' as ItemStatus,
       scheduled_date: content.scheduledDate.toISOString(),
-      hashtags: content.hashtags || [],
-    }));
+    } as ContentItemFormData));
 
     const { data: contentItems, error: itemsError } = await supabase
       .from('content_items')

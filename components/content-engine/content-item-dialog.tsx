@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { Copy, Check } from 'lucide-react';
 import {
@@ -40,6 +40,15 @@ export function ContentItemDialog({ item, open, onOpenChange }: ContentItemDialo
   const [editedDescription, setEditedDescription] = useState('');
 
   const updateItem = useUpdateContentItem();
+
+  // Reset edit state when dialog closes or item changes
+  useEffect(() => {
+    if (!open || !item) {
+      setEditedTitle('');
+      setEditedDescription('');
+      setCopiedSection(null);
+    }
+  }, [open, item]);
 
   const handleCopy = (text: string, section: string) => {
     navigator.clipboard.writeText(text);

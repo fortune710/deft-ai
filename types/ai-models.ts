@@ -3,8 +3,8 @@ export type AIModelProvider = 'google' | 'grok';
 export type AIModelName =
   | 'gemini-2.5-flash'
   | 'gemini-2.5-pro'
-  | 'grok-4.1-fast-reasoning'
-  | 'grok-4.1-fast-non-reasoning';
+  | 'grok-4-fast-reasoning'
+  | 'grok-4-fast-non-reasoning';
 
 export interface AIModelConfig {
   provider: AIModelProvider;
@@ -46,12 +46,12 @@ export const AI_MODELS = {
   },
   GROK_REASONING: {
     provider: 'grok' as AIModelProvider,
-    model: 'grok-4.1-fast-reasoning' as AIModelName,
+    model: 'grok-4-fast-reasoning' as AIModelName,
     temperature: 0.7,
   },
   GROK_NON_REASONING: {
     provider: 'grok' as AIModelProvider,
-    model: 'grok-4.1-fast-non-reasoning' as AIModelName,
+    model: 'grok-4-fast-non-reasoning' as AIModelName,
     temperature: 0.7,
   },
 } as const;

@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { ContentPlanOrchestrator } from '@/lib/ai/orchestrator/content-plan-orchestrator';
+import { ContentEngineServerTracking } from '@/lib/posthog/server';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
 
 export async function POST(request: NextRequest) {
+  const startTime = Date.now();
+  let userId: string | undefined;
+  let planName: string | undefined;
+  let platforms: string[] | undefined;
+
   try {
     const supabase = await createServerSupabaseClient();
 
@@ -15,13 +21,27 @@ export async function POST(request: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (authError || !user) {
+      await ContentEngineServerTracking.generatePlan({
+        status: 401,
+        error: 'Unauthorized',
+        duration: Date.now() - startTime,
+      });
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    userId = user.id;
+
     const body = await request.json();
-    const { planName, platforms } = body;
+    planName = body.planName;
+    platforms = body.platforms;
 
     if (!planName || !platforms || platforms.length === 0) {
+      await ContentEngineServerTracking.generatePlan({
+        status: 400,
+        error: 'Plan name and platforms are required',
+        duration: Date.now() - startTime,
+        userId,
+      });
       return NextResponse.json(
         { error: 'Plan name and platforms are required' },
         { status: 400 }
@@ -35,11 +55,25 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (profileError || !profile) {
+      await ContentEngineServerTracking.generatePlan({
+        status: 404,
+        error: 'User profile not found',
+        duration: Date.now() - startTime,
+        userId,
+      });
       return NextResponse.json(
         { error: 'User profile not found. Please complete onboarding.' },
         { status: 404 }
       );
     }
+
+    // Track plan generation start
+    await ContentEngineServerTracking.generatePlan({
+      planName,
+      platforms,
+      platformCount: platforms.length,
+      userId,
+    });
 
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
@@ -62,6 +96,16 @@ export async function POST(request: NextRequest) {
             goals: profile.question_2_goal ? [profile.question_2_goal] : [],
           });
 
+          const duration = Date.now() - startTime;
+
+          // Track successful plan generation
+          await ContentEngineServerTracking.planGenerated({
+            planId: contentPlan?.id,
+            itemCount: contentPlan?.items?.length,
+            duration,
+            userId,
+          });
+
           const finalData = JSON.stringify({
             phase: 'complete',
             progress: 100,
@@ -72,6 +116,15 @@ export async function POST(request: NextRequest) {
           controller.close();
         } catch (error) {
           console.error('Error in orchestrator:', error);
+          const duration = Date.now() - startTime;
+
+          // Track failed plan generation
+          await ContentEngineServerTracking.planGenerationFailed({
+            error: error instanceof Error ? error.message : 'Failed to generate content plan',
+            duration,
+            userId,
+          });
+
           const errorData = JSON.stringify({
             phase: 'error',
             progress: 0,
@@ -93,6 +146,11 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Error generating content plan:', error);
+    await ContentEngineServerTracking.planGenerationFailed({
+      error: error instanceof Error ? error.message : 'Internal server error',
+      duration: Date.now() - startTime,
+      userId,
+    });
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Internal server error' },
       { status: 500 }
