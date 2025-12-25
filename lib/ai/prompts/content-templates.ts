@@ -199,26 +199,60 @@ MANDATORY REQUIREMENTS:
 
 OUTPUT FORMAT:
 
-Return a JSON object with this exact structure:
+Return ONLY a JSON object (no markdown, no code blocks) with this exact structure:
 
-{
-  "content": "Full content formatted for ${platform}",
-  "metadata": {
-    "hookType": "Type of hook used",
-    "structure": "Brief structure description",
-    "callToAction": "The CTA used",
-    ${platform === 'instagram' || platform === 'tiktok' ? '"visualCues": ["List", "of", "visual", "suggestions"],' : ''}
-    ${platform === 'tiktok' || platform === 'instagram' ? '"audioSuggestion": "Trending audio or style",' : ''}
-    "hashtags": ["relevant", "hashtags", "for", "platform"]
-  }
-}
+${getSchemaInstructions(platform)}
 
 PLATFORM-SPECIFIC FORMATTING:
 
 ${getPlatformFormattingGuide(platform)}
 
-Now create scroll-stopping, engagement-driving content for this idea. Return ONLY valid JSON:
+Now create scroll-stopping, engagement-driving content for this idea. Return ONLY the JSON object:
   `.trim();
+}
+
+function getSchemaInstructions(platform: string): string {
+  const platformLower = platform.toLowerCase();
+
+  switch (platformLower) {
+    case 'twitter':
+    case 'linkedin':
+      return `{
+  "script_content": "The main post content",
+  "hashtags": ["array", "of", "hashtags"]
+}`;
+
+    case 'instagram':
+    case 'tiktok':
+      return `{
+  "caption": "Short caption for the post",
+  "script_content": "Full script with timing and descriptions",
+  "visual_cues": ["List", "of", "visual", "suggestions"],
+  "audio_suggestion": "Trending audio or music style recommendation",
+  "hashtags": ["array", "of", "relevant", "hashtags"]
+}`;
+
+    case 'youtube':
+      return `{
+  "caption": "Video description",
+  "script_content": "Full script with timing and retention hooks",
+  "visual_cues": ["List", "of", "visual", "suggestions"],
+  "hashtags": ["array", "of", "hashtags"]
+}`;
+
+    case 'facebook':
+      return `{
+  "caption": "The post content",
+  "script_content": "Full post text",
+  "hashtags": ["array", "of", "hashtags"]
+}`;
+
+    default:
+      return `{
+  "script_content": "The main content",
+  "hashtags": ["hashtags"]
+}`;
+  }
 }
 
 function getPlatformFormattingGuide(platform: string): string {

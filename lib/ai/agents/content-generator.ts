@@ -1,7 +1,14 @@
 import { Agent, AgentContext, ContentGeneratorResult, ScoredContentIdea, GeneratedContent, ProgressCallback } from '@/types/ai-agents';
 import { AI_MODELS, AIModelConfig } from '@/types/ai-models';
-import { generateWithModel } from '../models';
+import { generateObjectWithModel } from '../models';
 import { buildContentGenerationPrompt } from '../prompts/content-templates';
+import {
+  generatePlatformContent,
+  generateFallbackContent,
+  validatePlatformContent,
+  extractMetadataFromContent,
+} from '../utils/content-generator-utils';
+import { getContentSchema } from '../schemas/content-schemas';
 import { addDays, startOfDay } from 'date-fns';
 
 export class ContentGeneratorAgent implements Agent {
@@ -51,16 +58,16 @@ export class ContentGeneratorAgent implements Agent {
       });
 
       try {
-        const content = await this.generateContentForIdea(idea, context);
+        const result = await this.generateContentForIdea(idea, context);
         const scheduledDate = addDays(startDate, i);
 
         generatedContent.push({
           idea,
-          content: content.content,
+          content: result.scriptContent,
           platform: idea.platform,
           scheduledDate,
-          hashtags: content.metadata.hashtags,
-          metadata: content.metadata,
+          hashtags: result.platformContent.hashtags || [],
+          metadata: result.metadata,
         });
 
         successCount++;
@@ -68,13 +75,35 @@ export class ContentGeneratorAgent implements Agent {
         console.error(`Error generating content for idea ${idea.id}:`, error);
         failedCount++;
 
-        generatedContent.push({
-          idea,
-          content: this.generateFallbackContent(idea),
-          platform: idea.platform,
-          scheduledDate: addDays(startDate, i),
-          hashtags: [],
-        });
+        try {
+          const fallbackContent = await generateFallbackContent(idea, this.modelConfig);
+          generatedContent.push({
+            idea,
+            content: fallbackContent,
+            platform: idea.platform,
+            scheduledDate: addDays(startDate, i),
+            hashtags: [],
+            metadata: {
+              hookType: 'fallback',
+              structure: 'simple',
+              callToAction: 'engage',
+            },
+          });
+        } catch (fallbackError) {
+          console.error(`Fallback generation also failed for idea ${idea.id}:`, fallbackError);
+          generatedContent.push({
+            idea,
+            content: `${idea.title}\n\n${idea.description}`,
+            platform: idea.platform,
+            scheduledDate: addDays(startDate, i),
+            hashtags: [],
+            metadata: {
+              hookType: 'error',
+              structure: 'basic',
+              callToAction: 'engage',
+            },
+          });
+        }
       }
     }
 
@@ -95,7 +124,7 @@ export class ContentGeneratorAgent implements Agent {
   private async generateContentForIdea(
     idea: ScoredContentIdea,
     context: AgentContext
-  ): Promise<{ content: string; metadata: any }> {
+  ): Promise<{ scriptContent: string; platformContent: any; metadata: any }> {
     const prompt = buildContentGenerationPrompt(
       idea.platform,
       {
@@ -109,65 +138,24 @@ export class ContentGeneratorAgent implements Agent {
     );
 
     const modelToUse = this.getModelForPlatform(idea.platform);
+    const schema = getContentSchema(idea.platform);
 
-    const response = await generateWithModel(
-      modelToUse,
-      prompt,
-      'You are an expert content creator. Return ONLY valid JSON with content and metadata. No markdown, no explanations.'
-    );
+    const systemPrompt =
+      'You are an expert content creator. Return ONLY valid JSON with the exact structure requested. No markdown, no explanations, no code blocks.';
 
-    return this.parseContentFromResponse(response.content);
-  }
+    const platformContent = await generateObjectWithModel(modelToUse, schema, prompt, systemPrompt);
 
-  private parseContentFromResponse(content: string): { content: string; metadata: any } {
-    try {
-      let jsonContent = content.trim();
-
-      if (jsonContent.startsWith('```json')) {
-        jsonContent = jsonContent.replace(/```json\n?/g, '').replace(/```\n?/g, '');
-      } else if (jsonContent.startsWith('```')) {
-        jsonContent = jsonContent.replace(/```\n?/g, '');
-      }
-
-      const parsed = JSON.parse(jsonContent.trim());
-
-      return {
-        content: parsed.content || '',
-        metadata: parsed.metadata || {
-          hookType: 'standard',
-          structure: 'standard',
-          callToAction: 'engage',
-          hashtags: [],
-        },
-      };
-    } catch (error) {
-      console.error('Error parsing content response:', error);
-      console.error('Response content:', content.substring(0, 500));
-
-      const cleanContent = content
-        .replace(/```json\n?/g, '')
-        .replace(/```\n?/g, '')
-        .trim();
-
-      return {
-        content: cleanContent,
-        metadata: {
-          hookType: 'parsed_error',
-          structure: 'standard',
-          callToAction: 'engage',
-          hashtags: [],
-        },
-      };
+    if (!validatePlatformContent(idea.platform, platformContent)) {
+      throw new Error(`Invalid content structure for ${idea.platform}`);
     }
-  }
 
-  private generateFallbackContent(idea: ScoredContentIdea): string {
-    return `${idea.title}
+    const metadata = extractMetadataFromContent(idea.platform, platformContent);
+    const scriptContent = platformContent.script_content || platformContent.caption || '';
 
-${idea.description}
-
-${idea.hook || ''}
-
-#${idea.contentPillar.replace(/\s+/g, '')} #content #${idea.platform}`;
+    return {
+      scriptContent,
+      platformContent,
+      metadata,
+    };
   }
 }
