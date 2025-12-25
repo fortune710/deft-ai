@@ -23,6 +23,7 @@ import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import { createContentItem } from '@/lib/api/content-items';
 import { useContentPlans } from '@/hooks/use-content-plans';
+import { ContentEngineTracking } from '@/lib/posthog/track';
 
 interface AddToContentButtonProps {
   sessionId: string;
@@ -32,7 +33,7 @@ interface AddToContentButtonProps {
 export function AddToContentButton({ sessionId, content }: AddToContentButtonProps) {
   const router = useRouter();
   const { plans } = useContentPlans();
-  const activePlan = plans?.find((p) => p.status === 'active');
+  const activePlan = plans?.find((p) => p.is_active);
 
   const [showDialog, setShowDialog] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState(content.platform || 'youtube');
@@ -54,7 +55,7 @@ export function AddToContentButton({ sessionId, content }: AddToContentButtonPro
     setIsAdding(true);
 
     try {
-      await createContentItem({
+      const createdItem = await createContentItem({
         plan_id: activePlan?.id || null,
         title: selectedHook.text,
         description: content.fullScript.substring(0, 200),
@@ -62,13 +63,19 @@ export function AddToContentButton({ sessionId, content }: AddToContentButtonPro
         scheduled_date: new Date().toISOString(),
         status: selectedStatus,
         content: {
-          hook: selectedHook.text,
-          script: content.fullScript,
-          cta: content.goalAlignedCTA,
-          visualDirection: content.visualDirection,
-          thumbnail: content.thumbnailStrategy,
-          metadata: content.platformMetadata,
+          hook_suggestion: selectedHook.text,
+          script_content: content.fullScript,
+          cta_suggestion: content.goalAlignedCTA,
+          hashtags: content.platformMetadata?.hashtags || [],
         },
+      });
+
+      // Track content item creation
+      ContentEngineTracking.contentItemCreated({
+        itemId: createdItem.id,
+        platform: selectedPlatform,
+        status: selectedStatus,
+        planId: activePlan?.id || null,
       });
 
       toast.success('Added to Content Engine');
