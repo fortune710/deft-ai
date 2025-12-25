@@ -1,10 +1,11 @@
-import { createXai } from '@ai-sdk/xai';
-import { generateObject, generateText, Output } from 'ai';
+import OpenAI from 'openai';
+import { zodResponseFormat } from 'openai/helpers/zod';
 import { AIModelConfig, AIModelResponse } from '@/types/ai-models';
 import { z } from 'zod';
 
-const xai = createXai({
+const client = new OpenAI({
   apiKey: process.env.XAI_API_KEY,
+  baseURL: 'https://api.x.ai/v1',
 });
 
 export async function generateWithGrok(
@@ -19,7 +20,7 @@ export async function generateWithGrok(
       throw new Error('XAI_API_KEY environment variable is not set');
     }
 
-    const messages = [];
+    const messages: OpenAI.ChatCompletionMessageParam[] = [];
 
     if (systemPrompt) {
       messages.push({
@@ -33,34 +34,21 @@ export async function generateWithGrok(
       content: prompt,
     });
 
-    const response = await fetch('https://api.x.ai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: config.model,
-        messages,
-        temperature: config.temperature ?? 0.7,
-        max_tokens: config.maxTokens ?? 8192,
-        top_p: config.topP ?? 0.95,
-      }),
+    const response = await client.chat.completions.create({
+      model: config.model,
+      messages,
+      max_tokens: config.maxTokens ?? 8192,
+      temperature: config.temperature ?? 0.7,
     });
 
-    if (!response.ok) {
-      const errorData = await response.text();
-      throw new Error(`Grok API error: ${response.status} ${errorData}`);
-    }
-
-    const data = await response.json();
+    const text = response.choices[0]?.message?.content || '';
 
     return {
-      content: data.choices[0]?.message?.content || '',
+      content: text,
       usage: {
-        promptTokens: data.usage?.prompt_tokens,
-        completionTokens: data.usage?.completion_tokens,
-        totalTokens: data.usage?.total_tokens,
+        promptTokens: response.usage?.prompt_tokens,
+        completionTokens: response.usage?.completion_tokens,
+        totalTokens: response.usage?.total_tokens,
       },
     };
   } catch (error) {
@@ -76,20 +64,41 @@ export async function generateObjectWithGrok<T extends z.ZodSchema>(
   systemPrompt?: string
 ): Promise<z.infer<T>> {
   try {
-    const model = xai(config.model);
+    const apiKey = process.env.XAI_API_KEY;
 
-    const result = await generateText({
-      model,
-      output: Output.object({
-        schema,
-      }),
-      prompt,
-      system: systemPrompt,
-      temperature: config.temperature ?? 0.7,
-      //maxTokens: config.maxTokens ?? 8192,
+    if (!apiKey) {
+      throw new Error('XAI_API_KEY environment variable is not set');
+    }
+
+    const messages: OpenAI.ChatCompletionMessageParam[] = [];
+
+    if (systemPrompt) {
+      messages.push({
+        role: 'system',
+        content: systemPrompt,
+      });
+    }
+
+    messages.push({
+      role: 'user',
+      content: prompt,
     });
 
-    return result.response.body as z.infer<T>;
+    const response = await client.beta.chat.completions.parse({
+      model: config.model,
+      messages,
+      response_format: zodResponseFormat(schema, 'response'),
+      max_tokens: config.maxTokens ?? 8192,
+      temperature: config.temperature ?? 0.7,
+    });
+
+    const parsed = response.choices[0]?.message?.parsed;
+
+    if (!parsed) {
+      throw new Error('Failed to parse structured response from Grok');
+    }
+
+    return parsed;
   } catch (error) {
     console.error('Grok AI structured generation error:', error);
     throw new Error(
@@ -104,17 +113,35 @@ export async function generateTextWithGrok(
   systemPrompt?: string
 ): Promise<string> {
   try {
-    const model = xai(config.model);
+    const apiKey = process.env.XAI_API_KEY;
 
-    const result = await generateText({
-      model,
-      prompt,
-      system: systemPrompt,
+    if (!apiKey) {
+      throw new Error('XAI_API_KEY environment variable is not set');
+    }
+
+    const messages: OpenAI.ChatCompletionMessageParam[] = [];
+
+    if (systemPrompt) {
+      messages.push({
+        role: 'system',
+        content: systemPrompt,
+      });
+    }
+
+    messages.push({
+      role: 'user',
+      content: prompt,
+    });
+
+    const response = await client.chat.completions.create({
+      model: config.model,
+      messages,
+      max_tokens: config.maxTokens ?? 8192,
       temperature: config.temperature ?? 0.7,
       //maxTokens: config.maxTokens ?? 8192,
     });
 
-    return result.text;
+    return response.choices[0]?.message?.content || '';
   } catch (error) {
     console.error('Grok AI text generation error:', error);
     throw new Error(
