@@ -67,26 +67,28 @@ export function AppSidebar() {
     router.push('/login');
   };
 
-  return (
-    <div className="flex h-screen w-64 flex-col border-r bg-sidebar">
-      <div className="flex h-14 items-center border-b px-6">
-        <h2 className="text-lg font-semibold">Deft</h2>
-      </div>
+  const filteredNavItems = navItems.filter((item) => {
+    // Content Engine is always visible
+    if (item.visible === true) return true;
+    // Other items are only visible in development
+    if (item.visible === false) {
+      return process.env.NODE_ENV === 'development';
+    }
+    // Default: show in development
+    return process.env.NODE_ENV === 'development';
+  });
 
-      <ScrollArea className="flex-1 px-3 py-4">
-        <div className="space-y-1">
-          {navItems
-            .filter((item) => {
-              // Content Engine is always visible
-              if (item.visible === true) return true;
-              // Other items are only visible in development
-              if (item.visible === false) {
-                return process.env.NODE_ENV === 'development';
-              }
-              // Default: show in development
-              return process.env.NODE_ENV === 'development';
-            })
-            .map((item) => {
+  return (
+    <>
+      {/* Desktop Sidebar */}
+      <div className="hidden md:flex h-screen w-64 flex-col border-r bg-sidebar">
+        <div className="flex h-14 items-center border-b px-6">
+          <h2 className="text-lg font-semibold">Deft</h2>
+        </div>
+
+        <ScrollArea className="flex-1 px-3 py-4">
+          <div className="space-y-1">
+            {filteredNavItems.map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.href;
               return (
@@ -103,41 +105,66 @@ export function AppSidebar() {
                 </Button>
               );
             })}
+          </div>
+
+          <Separator className="my-4" />
+
+          <div className="space-y-1">
+            {settingsItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = pathname === item.href;
+              return (
+                <Button
+                  key={item.href}
+                  variant={isActive ? 'secondary' : 'ghost'}
+                  className="w-full justify-start"
+                  asChild
+                >
+                  <Link href={item.href}>
+                    <Icon className="mr-2 h-4 w-4" />
+                    {item.title}
+                  </Link>
+                </Button>
+              );
+            })}
+          </div>
+        </ScrollArea>
+
+        <div className="border-t p-3">
+          <Button
+            variant="ghost"
+            className="w-full justify-start text-muted-foreground"
+            onClick={handleSignOut}
+          >
+            <LogOut className="mr-2 h-4 w-4" />
+            Sign Out
+          </Button>
         </div>
-
-        <Separator className="my-4" />
-
-        <div className="space-y-1">
-          {settingsItems.map((item) => {
+      </div>
+      
+      {/* Mobile Bottom Tab Bar */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t bg-sidebar">
+        <div className="bg-background flex items-center justify-around h-16 px-2">
+          {filteredNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.href;
             return (
-              <Button
+              <Link
                 key={item.href}
-                variant={isActive ? 'secondary' : 'ghost'}
-                className="w-full justify-start"
-                asChild
+                href={item.href}
+                className={`flex flex-col items-center justify-center gap-1 flex-1 h-full rounded-md transition-colors ${
+                  isActive
+                    ? 'text-primary bg-primary/10'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                }`}
               >
-                <Link href={item.href}>
-                  <Icon className="mr-2 h-4 w-4" />
-                  {item.title}
-                </Link>
-              </Button>
+                <Icon className="h-5 w-5" />
+                <span className="text-xs font-medium">{item.title}</span>
+              </Link>
             );
           })}
         </div>
-      </ScrollArea>
-
-      <div className="border-t p-3">
-        <Button
-          variant="ghost"
-          className="w-full justify-start text-muted-foreground"
-          onClick={handleSignOut}
-        >
-          <LogOut className="mr-2 h-4 w-4" />
-          Sign Out
-        </Button>
       </div>
-    </div>
+    </>
   );
 }
