@@ -1,5 +1,5 @@
-'use client';
-
+import { Suspense } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import {
@@ -12,8 +12,20 @@ import {
   Target,
   ArrowRight,
 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+
+const AuthNavButtons = dynamic(() => import('@/components/auth-nav-buttons').then(mod => ({ default: mod.AuthNavButtons })), {
+  ssr: false,
+  loading: () => (
+    <div className="flex gap-4">
+      <Skeleton className="h-10 w-20 rounded-md" />
+      <Skeleton className="h-10 w-24 rounded-md" />
+    </div>
+  ),
+});
 
 export default function Home() {
+
   return (
     <div className="w-full bg-gradient-to-b from-background via-background to-muted/20">
       <nav className="sticky top-0 z-50 border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -22,15 +34,19 @@ export default function Home() {
             <div className="bg-primary text-primary-foreground flex size-8 items-center justify-center rounded-md">
               <Sparkles className="size-5" />
             </div>
-            <span>Content Engine</span>
+            <span>Deft</span>
           </div>
           <div className="flex gap-4">
-            <Button variant="ghost" asChild>
-              <Link href="/login">Login</Link>
-            </Button>
-            <Button asChild>
-              <Link href="/sign-up">Sign Up</Link>
-            </Button>
+            <Suspense
+              fallback={
+                <div className="flex gap-4">
+                  <Skeleton className="h-10 w-20 rounded-md" />
+                  <Skeleton className="h-10 w-24 rounded-md" />
+                </div>
+              }
+            >
+              <AuthNavButtons />
+            </Suspense>
           </div>
         </div>
       </nav>

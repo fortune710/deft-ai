@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { ContentItemCard } from './content-item-card';
 import { ContentItemDialog } from './content-item-dialog';
@@ -28,12 +28,14 @@ export function BoardView({ items, planId }: BoardViewProps) {
   const deleteItem = useDeleteContentItem();
   const duplicateItem = useDuplicateContentItem();
 
-  const itemsByStatus = statusColumns.reduce((acc, column) => {
-    acc[column.id] = items
-      .filter((item) => item.status === column.id)
-      .sort((a, b) => a.position - b.position);
-    return acc;
-  }, {} as Record<ItemStatus, ContentItem[]>);
+  const itemsByStatus = useMemo(() => {
+    return statusColumns.reduce((acc, column) => {
+      acc[column.id] = items
+        .filter((item) => item.status === column.id)
+        .sort((a, b) => a.position - b.position);
+      return acc;
+    }, {} as Record<ItemStatus, ContentItem[]>);
+  }, [items]);
 
   const handleDragEnd = (result: DropResult) => {
     const { source, destination, draggableId } = result;

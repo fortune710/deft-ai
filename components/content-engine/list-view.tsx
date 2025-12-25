@@ -205,12 +205,12 @@ export function ListView({ items, planId }: ListViewProps) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Title</TableHead>
-                <TableHead>Platform</TableHead>
-                <TableHead>Scheduled Date</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Hook Preview</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead className="text-white">Title</TableHead>
+                <TableHead className="text-white">Platform</TableHead>
+                <TableHead className="text-white">Scheduled Date</TableHead>
+                <TableHead className="text-white">Status</TableHead>
+                <TableHead className="text-white">Hook Preview</TableHead>
+                <TableHead className="text-right text-white">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -218,21 +218,21 @@ export function ListView({ items, planId }: ListViewProps) {
                 const statusOption = getStatusOption(item.status);
                 return (
                   <TableRow key={item.id}>
-                    <TableCell className="font-medium max-w-[250px]">
+                    <TableCell className="font-medium max-w-[250px] text-white">
                       <div className="line-clamp-1">{item.title}</div>
                       {item.description && (
-                        <div className="text-xs text-gray-500 line-clamp-1 mt-1">
+                        <div className="text-xs text-gray-300 line-clamp-1 mt-1">
                           {item.description}
                         </div>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="text-white">
                       <Badge variant="secondary">{platformLabels[item.platform]}</Badge>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="text-white">
                       {format(new Date(item.scheduled_date), 'MMM d, yyyy')}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="text-white">
                       <Select
                         value={item.status}
                         onValueChange={(value) => handleStatusChange(item.id, value as ItemStatus)}
@@ -251,8 +251,8 @@ export function ListView({ items, planId }: ListViewProps) {
                         </SelectContent>
                       </Select>
                     </TableCell>
-                    <TableCell className="max-w-[300px]">
-                      <div className="text-sm text-gray-600 line-clamp-2">
+                    <TableCell className="max-w-[300px] text-white">
+                      <div className="text-sm text-gray-200 line-clamp-2">
                         {item.content.hook_suggestion || 'No hook yet'}
                       </div>
                     </TableCell>

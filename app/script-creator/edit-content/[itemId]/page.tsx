@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import type { EditorContent } from '@/types/script-chat';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 export default function EditContentPage() {
   const params = useParams();
@@ -44,7 +45,7 @@ export default function EditContentPage() {
       content: {
         script_content: newContent.fullScript,
         cta_suggestion: newContent.goalAlignedCTA,
-        hook_suggestion: newContent.hookOptions[0]?.name || '',
+        hook_suggestion: newContent.hookOptions[0]?.text || '',
       },
     });
   };
@@ -91,13 +92,13 @@ export default function EditContentPage() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-hidden">
+        <ScrollArea className="flex-1 overflow-hidden">
           <ScriptEditor
             content={editorContent}
             sessionId={itemId}
             onContentChange={handleContentChange}
           />
-        </div>
+        </ScrollArea>
       </div>
     </div>
   );

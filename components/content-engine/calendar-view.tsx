@@ -28,10 +28,10 @@ const platformColors: Record<Platform, string> = {
 };
 
 const statusColors: Record<string, string> = {
-  idea: 'border-gray-300 bg-gray-50',
-  in_progress: 'border-blue-300 bg-blue-50',
-  ready: 'border-green-300 bg-green-50',
-  published: 'border-purple-300 bg-purple-50',
+  idea: 'border-border bg-muted text-muted-foreground',
+  in_progress: 'border-primary/30 bg-primary/10 text-primary-foreground',
+  ready: 'border-primary/50 bg-primary/20 text-primary-foreground',
+  published: 'border-primary bg-primary/30 text-primary-foreground',
 };
 
 export function CalendarView({ items, planStartDate }: CalendarViewProps) {
@@ -105,7 +105,7 @@ export function CalendarView({ items, planStartDate }: CalendarViewProps) {
           {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
             <div
               key={day}
-              className="text-center text-sm font-semibold text-gray-600 dark:text-gray-400 py-2"
+              className="text-center text-sm font-semibold text-muted-foreground py-2"
             >
               {day}
             </div>
@@ -122,11 +122,11 @@ export function CalendarView({ items, planStartDate }: CalendarViewProps) {
                 key={dateKey}
                 className={`min-h-[120px] p-2 border rounded-lg ${
                   isCurrentMonth
-                    ? 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'
-                    : 'bg-gray-50 dark:bg-gray-900 border-gray-100 dark:border-gray-800'
-                } ${isToday ? 'ring-2 ring-blue-500' : ''}`}
+                    ? 'bg-card border-border'
+                    : 'bg-muted/50 border-border/50'
+                } ${isToday ? 'ring-2 ring-primary' : ''}`}
               >
-                <div className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">
+                <div className="text-sm font-medium text-foreground mb-1">
                   {format(day, 'd')}
                 </div>
 
@@ -146,7 +146,7 @@ export function CalendarView({ items, planStartDate }: CalendarViewProps) {
                                   platformColors[item.platform]
                                 }`}
                               />
-                              <span className="line-clamp-1 flex-1">{item.title}</span>
+                              <span className="line-clamp-1 font-semibold flex-1">{item.title}</span>
                             </div>
                           </button>
                         </PopoverTrigger>
@@ -159,16 +159,16 @@ export function CalendarView({ items, planStartDate }: CalendarViewProps) {
                               </Badge>
                             </div>
                             {item.description && (
-                              <p className="text-sm text-gray-600 dark:text-gray-400">
+                              <p className="text-sm text-muted-foreground">
                                 {item.description}
                               </p>
                             )}
                             {item.content.hook_suggestion && (
                               <div>
-                                <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                <p className="text-xs font-semibold text-foreground mb-1">
                                   Hook:
                                 </p>
-                                <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-3">
+                                <p className="text-xs text-muted-foreground line-clamp-3">
                                   {item.content.hook_suggestion}
                                 </p>
                               </div>
@@ -189,7 +189,7 @@ export function CalendarView({ items, planStartDate }: CalendarViewProps) {
                     ))}
 
                     {dayItems.length > 2 && (
-                      <div className="text-xs text-gray-500 dark:text-gray-400 text-center py-1">
+                      <div className="text-xs text-muted-foreground text-center py-1">
                         +{dayItems.length - 2} more
                       </div>
                     )}
@@ -200,7 +200,7 @@ export function CalendarView({ items, planStartDate }: CalendarViewProps) {
           })}
         </div>
 
-        <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
+        <div className="flex items-center gap-4 text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-red-500" />
             <span>YouTube</span>
@@ -216,6 +216,14 @@ export function CalendarView({ items, planStartDate }: CalendarViewProps) {
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-blue-500" />
             <span>Twitter</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-indigo-500" />
+            <span>LinkedIn</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-blue-600" />
+            <span>Facebook</span>
           </div>
         </div>
       </div>

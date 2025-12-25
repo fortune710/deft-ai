@@ -42,6 +42,8 @@ export function HookSelector({ hooks, selectedHookId, onSelect, sessionId }: Hoo
     }
   };
 
+  if (hooks.length === 0) return null;
+
   return (
     <div className="space-y-4">
       <div>

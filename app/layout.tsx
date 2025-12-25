@@ -4,6 +4,7 @@ import { Inter } from 'next/font/google';
 import { ThemeProvider } from '@/components/theme-provider';
 import { QueryProvider } from '@/components/query-provider';
 import { Toaster } from '@/components/ui/toaster';
+import { PHProvider, PostHogPageView } from '@/lib/posthog/provider';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -41,10 +42,13 @@ export default function RootLayout({
           enableSystem={false}
           disableTransitionOnChange
         >
-          <QueryProvider>
-            {children}
-            <Toaster />
-          </QueryProvider>
+          <PHProvider>
+            <QueryProvider>
+              <PostHogPageView />
+              {children}
+              <Toaster />
+            </QueryProvider>
+          </PHProvider>
         </ThemeProvider>
       </body>
     </html>

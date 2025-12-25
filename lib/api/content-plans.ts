@@ -114,6 +114,19 @@ export async function archivePlan(planId: string): Promise<void> {
   if (error) throw error;
 }
 
+export async function archiveActivePlan(): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+
+  const { error } = await supabase
+    .from('content_plans')
+    .update({ is_active: false, archived_at: new Date().toISOString() })
+    .eq('user_id', user.id)
+    .eq('is_active', true);
+
+  if (error) throw error;
+}
+
 export async function restorePlan(planId: string): Promise<ContentPlan> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');

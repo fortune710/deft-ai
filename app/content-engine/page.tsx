@@ -1,25 +1,37 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
-import { Sparkles, LayoutGrid, List, Calendar as CalendarIcon, Smartphone, Loader2 } from 'lucide-react';
+import { Sparkles, LayoutGrid, List, Smartphone, Loader2 } from 'lucide-react';
 import { AppLayout } from '@/components/app-layout';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useContentProfile } from '@/hooks/use-content-profile';
 import { useActivePlan } from '@/hooks/use-content-plans';
 import { useContentItems } from '@/hooks/use-content-items';
-import { BoardView } from '@/components/content-engine/board-view';
-import { ListView } from '@/components/content-engine/list-view';
-import { CalendarView } from '@/components/content-engine/calendar-view';
+import { useQueryClient } from '@tanstack/react-query';
 import { MobileListView } from '@/components/content-engine/mobile-list-view';
 import { GeneratePlanDialog } from '@/components/content-engine/generate-plan-dialog';
 import { PlanSelector } from '@/components/content-engine/plan-selector';
 import { ArchivedPlansDialog } from '@/components/content-engine/archived-plans-dialog';
+import { BoardViewSkeleton } from '@/components/content-engine/board-view-skeleton';
+import { ListViewSkeleton } from '@/components/content-engine/list-view-skeleton';
 import type { ViewMode } from '@/types/content-engine';
+
+const BoardView = dynamic(() => import('@/components/content-engine/board-view').then(mod => ({ default: mod.BoardView })), {
+  ssr: false,
+  loading: () => <BoardViewSkeleton />,
+});
+
+const ListView = dynamic(() => import('@/components/content-engine/list-view').then(mod => ({ default: mod.ListView })), {
+  ssr: false,
+  loading: () => <ListViewSkeleton />,
+});
 
 export default function ContentEnginePage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { profile, isLoading: profileLoading } = useContentProfile();
   const { data: activePlan, isLoading: planLoading } = useActivePlan();
   const { data: items = [], isLoading: itemsLoading } = useContentItems(activePlan?.id || null);
@@ -40,7 +52,7 @@ export default function ContentEnginePage() {
 
   useEffect(() => {
     const saved = localStorage.getItem('content-engine-view');
-    if (saved && ['board', 'list', 'calendar'].includes(saved)) {
+    if (saved && ['board', 'list'].includes(saved)) {
       setViewMode(saved as ViewMode);
     }
   }, []);
@@ -52,6 +64,10 @@ export default function ContentEnginePage() {
 
   const handlePlanGenerated = (planId: string) => {
     setGenerateDialogOpen(false);
+    // Immediately refresh plan + items so the UI reflects the new active plan.
+    queryClient.invalidateQueries({ queryKey: ['content-plans'] });
+    queryClient.invalidateQueries({ queryKey: ['content-plans', 'active'] });
+    queryClient.invalidateQueries({ queryKey: ['content-items'] });
   };
 
   if (profileLoading || planLoading) {
@@ -139,10 +155,6 @@ export default function ContentEnginePage() {
                       <List className="h-4 w-4 mr-2" />
                       List
                     </TabsTrigger>
-                    <TabsTrigger value="calendar">
-                      <CalendarIcon className="h-4 w-4 mr-2" />
-                      Calendar
-                    </TabsTrigger>
                   </TabsList>
                 </Tabs>
               )}
@@ -167,9 +179,6 @@ export default function ContentEnginePage() {
                   <>
                     {viewMode === 'board' && <BoardView items={items} planId={activePlan.id} />}
                     {viewMode === 'list' && <ListView items={items} planId={activePlan.id} />}
-                    {viewMode === 'calendar' && (
-                      <CalendarView items={items} planStartDate={activePlan.start_date} />
-                    )}
                   </>
                 )}
               </div>

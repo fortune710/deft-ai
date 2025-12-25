@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input';
 import { supabase } from '@/lib/supabase/client';
 import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
+import { identifyUser } from '@/lib/posthog/track';
 
 export function LoginForm({
   className,
@@ -48,6 +49,11 @@ export function LoginForm({
       if (data.user && data.session) {
         document.cookie = `sb-access-token=${data.session.access_token}; path=/; max-age=3600; SameSite=Lax`;
         document.cookie = `sb-refresh-token=${data.session.refresh_token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+
+        // Identify user in PostHog
+        identifyUser(data.user.id, {
+          email: data.user.email,
+        });
 
         const { data: profile } = await supabase
           .from('user_content_profile')

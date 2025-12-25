@@ -67,7 +67,7 @@ Generate ${totalPosts} content ideas distributed across 30 days. For each conten
 3. Target platform from: ${platforms.join(', ')}
 4. Complete content package including:
    - hook_suggestion: An attention-grabbing opening (1-2 sentences)
-   - script_content: Full script/content body (150-300 words for video, 50-100 for short-form)
+   - script_content: Full script/content body (150-300 words for video , 50-100 for short-form)
    - cta_suggestion: A compelling call-to-action (1 sentence)
    - hashtags: 5-10 relevant hashtags (as array of strings without # symbol)
    - clip_suggestions: 3-5 B-roll/visual ideas (as array of strings)

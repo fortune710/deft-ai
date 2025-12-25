@@ -1,19 +1,22 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, ReactNode } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Textarea } from '../ui/textarea';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
-import { Copy } from 'lucide-react';
+import { Copy, Save } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface EditorSectionProps {
   title: string;
   description: string;
-  content: string;
+  content: string | ReactNode;
   onContentChange?: (newContent: string) => void;
-  type: 'text' | 'textarea' | 'display';
+  onSave?: () => void | Promise<void>;
+  type: 'text' | 'textarea' | 'display' | 'custom';
+  hasChanges?: boolean;
+  isSaving?: boolean;
 }
 
 export function EditorSection({
@@ -21,12 +24,17 @@ export function EditorSection({
   description,
   content,
   onContentChange,
+  onSave,
   type,
+  hasChanges = false,
+  isSaving = false,
 }: EditorSectionProps) {
-  const [localContent, setLocalContent] = useState(content);
+  const [localContent, setLocalContent] = useState(typeof content === 'string' ? content : '');
 
   useEffect(() => {
-    setLocalContent(content);
+    if (typeof content === 'string') {
+      setLocalContent(content);
+    }
   }, [content]);
 
   const handleChange = (value: string) => {
@@ -34,14 +42,27 @@ export function EditorSection({
   };
 
   const handleBlur = () => {
-    if (onContentChange && localContent !== content) {
+    if (onContentChange && typeof content === 'string' && localContent !== content) {
       onContentChange(localContent);
     }
   };
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(content);
-    toast.success('Copied to clipboard');
+    if (typeof content === 'string') {
+      navigator.clipboard.writeText(content);
+      toast.success('Copied to clipboard');
+    }
+  };
+
+  const handleSave = async () => {
+    if (onSave) {
+      try {
+        await onSave();
+        toast.success('Changes saved');
+      } catch (error) {
+        toast.error('Failed to save changes');
+      }
+    }
   };
 
   return (
@@ -52,13 +73,28 @@ export function EditorSection({
             <CardTitle>{title}</CardTitle>
             <CardDescription>{description}</CardDescription>
           </div>
-          <Button variant="ghost" size="icon" onClick={handleCopy}>
-            <Copy className="h-4 w-4" />
-          </Button>
+          <div className="flex gap-2">
+            {hasChanges && onSave && (
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handleSave}
+                disabled={isSaving}
+              >
+                <Save className="h-4 w-4 mr-2" />
+                {isSaving ? 'Saving...' : 'Save'}
+              </Button>
+            )}
+            {typeof content === 'string' && (
+              <Button variant="ghost" size="icon" onClick={handleCopy}>
+                <Copy className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         </div>
       </CardHeader>
       <CardContent>
-        {type === 'text' && (
+        {type === 'text' && typeof content === 'string' && (
           <Input
             value={localContent}
             onChange={(e) => handleChange(e.target.value)}
@@ -66,7 +102,7 @@ export function EditorSection({
             className="font-mono text-sm"
           />
         )}
-        {type === 'textarea' && (
+        {type === 'textarea' && typeof content === 'string' && (
           <Textarea
             value={localContent}
             onChange={(e) => handleChange(e.target.value)}
@@ -75,11 +111,12 @@ export function EditorSection({
             className="font-mono text-sm"
           />
         )}
-        {type === 'display' && (
+        {type === 'display' && typeof content === 'string' && (
           <pre className="text-sm bg-muted p-4 rounded-md overflow-auto whitespace-pre-wrap">
             {content}
           </pre>
         )}
+        {type === 'custom' && content}
       </CardContent>
     </Card>
   );

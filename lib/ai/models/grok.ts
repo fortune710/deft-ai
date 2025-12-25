@@ -138,6 +138,7 @@ export async function generateTextWithGrok(
       messages,
       max_tokens: config.maxTokens ?? 8192,
       temperature: config.temperature ?? 0.7,
+      //maxTokens: config.maxTokens ?? 8192,
     });
 
     return response.choices[0]?.message?.content || '';

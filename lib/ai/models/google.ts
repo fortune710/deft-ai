@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, ObjectSchema } from '@google/generative-ai';
 import { AIModelConfig, AIModelResponse } from '@/types/ai-models';
 import { z } from 'zod';
 
@@ -45,7 +45,11 @@ export async function generateObjectWithGoogle<T extends z.ZodSchema>(
       systemInstruction: systemPrompt,
       generationConfig: {
         responseMimeType: 'application/json',
-        responseSchema: convertZodToJsonSchema(schema),
+        responseSchema: {
+          type: 'object',
+          properties: convertZodToJsonSchema(schema),
+          //required: Object.keys(schema.shape as z.ZodObject<any>).map((key) => key as string),
+        } as ObjectSchema,
       },
     });
 

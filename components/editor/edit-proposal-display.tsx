@@ -23,11 +23,11 @@ export function EditProposalDisplay({ proposals }: EditProposalDisplayProps) {
             <div className="space-y-1">
               <div className="text-xs">
                 <span className="text-destructive font-medium">- </span>
-                <span className="line-through opacity-70">{proposal.before.substring(0, 100)}...</span>
+                <span className="line-through opacity-70">{(proposal.before as any).contentDescription}...</span>
               </div>
               <div className="text-xs">
                 <span className="text-green-600 font-medium">+ </span>
-                <span>{proposal.after.substring(0, 100)}...</span>
+                <span>{(proposal.after as any).contentDescription}...</span>
               </div>
             </div>
           </CardContent>
