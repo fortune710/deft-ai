@@ -13,6 +13,7 @@ import { useContentItems } from '@/hooks/use-content-items';
 import { useQueryClient } from '@tanstack/react-query';
 import { MobileListView } from '@/components/content-engine/mobile-list-view';
 import { GeneratePlanDialog } from '@/components/content-engine/generate-plan-dialog';
+import { GeneratePlanButton } from '@/components/content-engine/generate-plan-button';
 import { PlanSelector } from '@/components/content-engine/plan-selector';
 import { ArchivedPlansDialog } from '@/components/content-engine/archived-plans-dialog';
 import { BoardViewSkeleton } from '@/components/content-engine/board-view-skeleton';
@@ -99,21 +100,14 @@ export default function ContentEnginePage() {
     <AppLayout>
       <div className="space-y-6 pb-20">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
+          <div className='max-sm:hidden'>
             <h1 className="text-3xl font-bold tracking-tight">Content Engine</h1>
             <p className="text-muted-foreground">
               AI-powered 30-day content planning and management
             </p>
           </div>
 
-          <Button
-            onClick={() => setGenerateDialogOpen(true)}
-            size="lg"
-            className="w-full sm:w-auto"
-          >
-            <Sparkles className="h-4 w-4 mr-2" />
-            Generate 30-Day Plan
-          </Button>
+          <GeneratePlanButton onClick={() => setGenerateDialogOpen(true)} />
         </div>
 
         {showEmptyState ? (
@@ -157,13 +151,6 @@ export default function ContentEnginePage() {
                     </TabsTrigger>
                   </TabsList>
                 </Tabs>
-              )}
-
-              {isMobile && (
-                <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                  <Smartphone className="h-4 w-4" />
-                  <span>Mobile View</span>
-                </div>
               )}
             </div>
 
