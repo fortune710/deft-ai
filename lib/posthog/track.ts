@@ -54,6 +54,29 @@ export const ScriptGeneratorTracking = {
 };
 
 /**
+ * Identify a user in PostHog
+ * @param userId - The user's unique ID
+ * @param properties - Optional user properties (email, name, etc.)
+ */
+export function identifyUser(userId: string, properties?: Record<string, any>) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  // Wait for PostHog to be loaded
+  const identify = () => {
+    if (posthog.__loaded) {
+      posthog.identify(userId, properties);
+    } else {
+      // Retry after a short delay if PostHog isn't loaded yet
+      setTimeout(identify, 100);
+    }
+  };
+
+  identify();
+}
+
+/**
  * Track content engine events
  */
 export const ContentEngineTracking = {
@@ -73,6 +96,14 @@ export const ContentEngineTracking = {
   },
   planGenerationFailed: (properties?: { error?: string }) => {
     trackEvent('content_engine_plan_generation_failed', properties);
+  },
+  contentItemCreated: (properties?: {
+    itemId?: string;
+    platform?: string;
+    status?: string;
+    planId?: string | null;
+  }) => {
+    trackEvent('content_engine_item_created', properties);
   },
 };
 

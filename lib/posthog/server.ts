@@ -1,31 +1,23 @@
-import { PostHog } from 'posthog-js';
-
-let posthogServer: PostHog | null = null;
+import { PostHog } from 'posthog-node';
 
 /**
  * Initialize PostHog server instance for server-side tracking
  */
 function getPostHogServer(): PostHog | null {
-  if (posthogServer) {
-    return posthogServer;
-  }
-
   const posthogKey = process.env.NEXT_PUBLIC_POSTHOG_KEY;
   const posthogHost = process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com';
 
   if (!posthogKey) {
-    return null;
+    throw new Error("PostHog Keey Missing in environment variables");
   }
 
-  try {
-    // For server-side, we'll use the Node.js SDK approach
-    // Since posthog-js is browser-only, we'll track via API calls
-    posthogServer = null; // We'll use fetch API instead
-    return null;
-  } catch (error) {
-    console.error('Failed to initialize PostHog server:', error);
-    return null;
-  }
+
+  const client = new PostHog(posthogKey,{
+    host: posthogHost
+  });
+
+
+  return client;
 }
 
 /**
@@ -36,42 +28,19 @@ export async function trackServerEvent(
   properties?: Record<string, any>,
   userId?: string
 ) {
-  const posthogKey = process.env.NEXT_PUBLIC_POSTHOG_KEY;
-  const posthogHost = process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com';
 
-  if (!posthogKey) {
-    return;
-  }
+  const client  = getPostHogServer();
 
-  try {
-    const response = await fetch(`${posthogHost}/batch/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        api_key: posthogKey,
-        batch: [
-          {
-            event: eventName,
-            properties: {
-              ...properties,
-              $lib: 'posthog-node',
-              $lib_version: '1.0.0',
-            },
-            distinct_id: userId || 'anonymous',
-            timestamp: new Date().toISOString(),
-          },
-        ],
-      }),
-    });
+  client?.capture({
+    event: eventName,
+    properties: {
+      ...properties,
+    },
+    distinctId: userId || 'anonymous',
 
-    if (!response.ok) {
-      console.error('PostHog tracking failed:', response.statusText);
-    }
-  } catch (error) {
-    console.error('Error tracking event to PostHog:', error);
-  }
+  })
+
+  client?.shutdown();
 }
 
 /**
