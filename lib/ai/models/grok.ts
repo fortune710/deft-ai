@@ -1,7 +1,11 @@
-import { xai } from '@ai-sdk/xai';
-import { generateObject, generateText } from 'ai';
+import { createXai } from '@ai-sdk/xai';
+import { generateObject, generateText, Output } from 'ai';
 import { AIModelConfig, AIModelResponse } from '@/types/ai-models';
 import { z } from 'zod';
+
+const xai = createXai({
+  apiKey: process.env.XAI_API_KEY,
+});
 
 export async function generateWithGrok(
   config: AIModelConfig,
@@ -72,20 +76,20 @@ export async function generateObjectWithGrok<T extends z.ZodSchema>(
   systemPrompt?: string
 ): Promise<z.infer<T>> {
   try {
-    const model = xai(config.model, {
-      apiKey: process.env.XAI_API_KEY,
-    });
+    const model = xai(config.model);
 
-    const result = await generateObject({
+    const result = await generateText({
       model,
-      schema,
+      output: Output.object({
+        schema,
+      }),
       prompt,
       system: systemPrompt,
       temperature: config.temperature ?? 0.7,
-      maxTokens: config.maxTokens ?? 8192,
+      //maxTokens: config.maxTokens ?? 8192,
     });
 
-    return result.object;
+    return result.response.body as z.infer<T>;
   } catch (error) {
     console.error('Grok AI structured generation error:', error);
     throw new Error(
@@ -100,16 +104,14 @@ export async function generateTextWithGrok(
   systemPrompt?: string
 ): Promise<string> {
   try {
-    const model = xai(config.model, {
-      apiKey: process.env.XAI_API_KEY,
-    });
+    const model = xai(config.model);
 
     const result = await generateText({
       model,
       prompt,
       system: systemPrompt,
       temperature: config.temperature ?? 0.7,
-      maxTokens: config.maxTokens ?? 8192,
+      //maxTokens: config.maxTokens ?? 8192,
     });
 
     return result.text;

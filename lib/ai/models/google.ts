@@ -1,10 +1,14 @@
-import { google } from '@ai-sdk/google';
-import { generateObject, generateText } from 'ai';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { generateObject, generateText, Output } from 'ai';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { AIModelConfig, AIModelResponse } from '@/types/ai-models';
 import { z } from 'zod';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+
+const google = createGoogleGenerativeAI({
+  apiKey: process.env.GEMINI_API_KEY || '',
+});
 
 export async function generateWithGoogle(
   config: AIModelConfig,
@@ -48,20 +52,20 @@ export async function generateObjectWithGoogle<T extends z.ZodSchema>(
   systemPrompt?: string
 ): Promise<z.infer<T>> {
   try {
-    const model = google(config.model, {
-      apiKey: process.env.GEMINI_API_KEY,
-    });
+    const model = google(config.model);
 
-    const result = await generateObject({
+    const result = await generateText({
       model,
-      schema,
+      output: Output.object({
+        schema,
+      }),
       prompt,
       system: systemPrompt,
       temperature: config.temperature ?? 0.7,
-      maxTokens: config.maxTokens ?? 8192,
+      //maxTokens: config.maxTokens ?? 8192,
     });
 
-    return result.object;
+    return result.response.body as z.infer<T>;
   } catch (error) {
     console.error('Google AI structured generation error:', error);
     throw new Error(
@@ -76,16 +80,14 @@ export async function generateTextWithGoogle(
   systemPrompt?: string
 ): Promise<string> {
   try {
-    const model = google(config.model, {
-      apiKey: process.env.GEMINI_API_KEY,
-    });
+    const model = google(config.model);
 
     const result = await generateText({
       model,
       prompt,
       system: systemPrompt,
       temperature: config.temperature ?? 0.7,
-      maxTokens: config.maxTokens ?? 8192,
+      //maxTokens: config.maxTokens ?? 8192,
     });
 
     return result.text;
