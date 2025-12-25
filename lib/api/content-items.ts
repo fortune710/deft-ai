@@ -1,6 +1,21 @@
 import { supabase } from '@/lib/supabase/client';
 import type { ContentItem, ItemStatus, ItemContent, Platform } from '@/types/content-engine';
 
+export async function fetchContentItem(itemId: string): Promise<ContentItem> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+
+  const { data, error } = await supabase
+    .from('content_items')
+    .select('*')
+    .eq('id', itemId)
+    .eq('user_id', user.id)
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
 export async function fetchContentItems(planId: string): Promise<ContentItem[]> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');

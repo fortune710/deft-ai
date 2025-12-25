@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { MoreVertical, Calendar, Trash2, Copy, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -46,13 +47,24 @@ export function ContentItemCard({
   onDuplicate,
   isDragging = false,
 }: ContentItemCardProps) {
+  const router = useRouter();
   const scheduledDate = new Date(item.scheduled_date);
   const formattedDate = format(scheduledDate, 'MMM d');
   const daysUntil = Math.ceil((scheduledDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 
+  const handleCardClick = () => {
+    router.push(`/script-creator/edit-content/${item.id}`);
+  };
+
+  const handleMenuEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onEdit(item);
+  };
+
   return (
     <div
-      className={`group bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 shadow-sm hover:shadow-md transition-shadow ${
+      onClick={handleCardClick}
+      className={`group bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 shadow-sm hover:shadow-md transition-shadow cursor-pointer ${
         isDragging ? 'opacity-50' : ''
       }`}
     >
@@ -62,21 +74,26 @@ export function ContentItemCard({
         </Badge>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 opacity-0 group-hover:opacity-100"
+              onClick={(e) => e.stopPropagation()}
+            >
               <MoreVertical className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => onEdit(item)}>
+            <DropdownMenuItem onClick={handleMenuEdit}>
               <Eye className="mr-2 h-4 w-4" />
-              View & Edit
+              View Details
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onDuplicate(item.id)}>
+            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDuplicate(item.id); }}>
               <Copy className="mr-2 h-4 w-4" />
               Duplicate
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => onDelete(item.id)} className="text-red-600">
+            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDelete(item.id); }} className="text-red-600">
               <Trash2 className="mr-2 h-4 w-4" />
               Delete
             </DropdownMenuItem>

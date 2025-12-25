@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
+  fetchContentItem,
   fetchContentItems,
   fetchContentItemsByStatus,
   fetchContentItemsByDateRange,
@@ -13,6 +14,14 @@ import {
   duplicateContentItem,
 } from '@/lib/api/content-items';
 import type { ContentItem, ItemStatus, ItemContent, Platform } from '@/types/content-engine';
+
+export function useContentItem(itemId: string | null) {
+  return useQuery({
+    queryKey: ['content-item', itemId],
+    queryFn: () => (itemId ? fetchContentItem(itemId) : null),
+    enabled: !!itemId,
+  });
+}
 
 export function useContentItems(planId: string | null) {
   return useQuery({
