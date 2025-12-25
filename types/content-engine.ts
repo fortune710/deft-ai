@@ -1,6 +1,6 @@
 export type ItemStatus = 'idea' | 'in_progress' | 'ready' | 'published';
 
-export type ViewMode = 'board' | 'list' | 'calendar';
+export type ViewMode = 'board' | 'list';
 
 export type Platform = 'youtube' | 'instagram' | 'tiktok' | 'twitter' | 'linkedin' | 'facebook';
 

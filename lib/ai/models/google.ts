@@ -1,17 +1,8 @@
-<<<<<<< HEAD
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
-import { generateObject, generateText, Output } from 'ai';
-=======
->>>>>>> 1c5ef9ed947023d042cc77279a5d374fc50a110e
 import { GoogleGenerativeAI, ObjectSchema } from '@google/generative-ai';
 import { AIModelConfig, AIModelResponse } from '@/types/ai-models';
 import { z } from 'zod';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-
-const google = createGoogleGenerativeAI({
-  apiKey: process.env.GEMINI_API_KEY || '',
-});
 
 export async function generateWithGoogle(
   config: AIModelConfig,
