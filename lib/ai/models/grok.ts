@@ -1,7 +1,11 @@
-import { xai } from '@ai-sdk/xai';
-import { generateObject, generateText } from 'ai';
+import OpenAI from 'openai';
 import { AIModelConfig, AIModelResponse } from '@/types/ai-models';
 import { z } from 'zod';
+
+const client = new OpenAI({
+  apiKey: process.env.XAI_API_KEY,
+  baseURL: 'https://api.x.ai/v1',
+});
 
 export async function generateWithGrok(
   config: AIModelConfig,
@@ -15,11 +19,11 @@ export async function generateWithGrok(
       throw new Error('XAI_API_KEY environment variable is not set');
     }
 
-    const messages = [];
+    const messages: OpenAI.MessageParam[] = [];
 
     if (systemPrompt) {
       messages.push({
-        role: 'system',
+        role: 'user',
         content: systemPrompt,
       });
     }
@@ -29,34 +33,25 @@ export async function generateWithGrok(
       content: prompt,
     });
 
-    const response = await fetch('https://api.x.ai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: config.model,
-        messages,
-        temperature: config.temperature ?? 0.7,
-        max_tokens: config.maxTokens ?? 8192,
-        top_p: config.topP ?? 0.95,
-      }),
+    const response = await client.messages.create({
+      model: config.model,
+      messages,
+      max_tokens: config.maxTokens ?? 8192,
+      temperature: config.temperature ?? 0.7,
     });
 
-    if (!response.ok) {
-      const errorData = await response.text();
-      throw new Error(`Grok API error: ${response.status} ${errorData}`);
-    }
-
-    const data = await response.json();
+    const text = response.content
+      .filter((block) => block.type === 'text')
+      .map((block) => (block as any).text)
+      .join('');
 
     return {
-      content: data.choices[0]?.message?.content || '',
+      content: text,
       usage: {
-        promptTokens: data.usage?.prompt_tokens,
-        completionTokens: data.usage?.completion_tokens,
-        totalTokens: data.usage?.total_tokens,
+        promptTokens: response.usage?.input_tokens,
+        completionTokens: response.usage?.output_tokens,
+        totalTokens:
+          (response.usage?.input_tokens ?? 0) + (response.usage?.output_tokens ?? 0),
       },
     };
   } catch (error) {
@@ -72,20 +67,40 @@ export async function generateObjectWithGrok<T extends z.ZodSchema>(
   systemPrompt?: string
 ): Promise<z.infer<T>> {
   try {
-    const model = xai(config.model, {
-      apiKey: process.env.XAI_API_KEY,
+    const apiKey = process.env.XAI_API_KEY;
+
+    if (!apiKey) {
+      throw new Error('XAI_API_KEY environment variable is not set');
+    }
+
+    const messages: OpenAI.MessageParam[] = [];
+
+    if (systemPrompt) {
+      messages.push({
+        role: 'user',
+        content: systemPrompt,
+      });
+    }
+
+    messages.push({
+      role: 'user',
+      content: prompt,
     });
 
-    const result = await generateObject({
-      model,
-      schema,
-      prompt,
-      system: systemPrompt,
+    const response = await client.messages.create({
+      model: config.model,
+      messages,
+      max_tokens: config.maxTokens ?? 8192,
       temperature: config.temperature ?? 0.7,
-      maxTokens: config.maxTokens ?? 8192,
     });
 
-    return result.object;
+    const text = response.content
+      .filter((block) => block.type === 'text')
+      .map((block) => (block as any).text)
+      .join('');
+
+    const parsed = JSON.parse(text);
+    return parsed;
   } catch (error) {
     console.error('Grok AI structured generation error:', error);
     throw new Error(
@@ -100,19 +115,37 @@ export async function generateTextWithGrok(
   systemPrompt?: string
 ): Promise<string> {
   try {
-    const model = xai(config.model, {
-      apiKey: process.env.XAI_API_KEY,
+    const apiKey = process.env.XAI_API_KEY;
+
+    if (!apiKey) {
+      throw new Error('XAI_API_KEY environment variable is not set');
+    }
+
+    const messages: OpenAI.MessageParam[] = [];
+
+    if (systemPrompt) {
+      messages.push({
+        role: 'user',
+        content: systemPrompt,
+      });
+    }
+
+    messages.push({
+      role: 'user',
+      content: prompt,
     });
 
-    const result = await generateText({
-      model,
-      prompt,
-      system: systemPrompt,
+    const response = await client.messages.create({
+      model: config.model,
+      messages,
+      max_tokens: config.maxTokens ?? 8192,
       temperature: config.temperature ?? 0.7,
-      maxTokens: config.maxTokens ?? 8192,
     });
 
-    return result.text;
+    return response.content
+      .filter((block) => block.type === 'text')
+      .map((block) => (block as any).text)
+      .join('');
   } catch (error) {
     console.error('Grok AI text generation error:', error);
     throw new Error(

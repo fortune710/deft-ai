@@ -10,11 +10,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ai-sdk/google": "^3.0.1",
-    "@ai-sdk/xai": "^3.0.1",
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@google-cloud/speech": "^7.2.1",
     "@google/generative-ai": "^0.24.1",
+    "openai": "^4.67.2",
     "@hello-pangea/dnd": "^18.0.1",
     "@hookform/resolvers": "^3.9.0",
     "@netlify/plugin-nextjs": "^5.15.1",
@@ -52,7 +51,6 @@
     "@types/node": "20.6.2",
     "@types/react": "18.2.22",
     "@types/react-dom": "18.2.7",
-    "ai": "^5.0.116",
     "autoprefixer": "10.4.15",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

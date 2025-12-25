@@ -1,5 +1,3 @@
-import { google } from '@ai-sdk/google';
-import { generateObject, generateText } from 'ai';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { AIModelConfig, AIModelResponse } from '@/types/ai-models';
 import { z } from 'zod';
@@ -14,12 +12,6 @@ export async function generateWithGoogle(
   try {
     const model = genAI.getGenerativeModel({
       model: config.model,
-      generationConfig: {
-        temperature: config.temperature ?? 0.7,
-        maxOutputTokens: config.maxTokens ?? 8192,
-        topP: config.topP ?? 0.95,
-        topK: config.topK ?? 40,
-      },
       systemInstruction: systemPrompt,
     });
 
@@ -48,20 +40,20 @@ export async function generateObjectWithGoogle<T extends z.ZodSchema>(
   systemPrompt?: string
 ): Promise<z.infer<T>> {
   try {
-    const model = google(config.model, {
-      apiKey: process.env.GEMINI_API_KEY,
+    const model = genAI.getGenerativeModel({
+      model: config.model,
+      systemInstruction: systemPrompt,
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: convertZodToJsonSchema(schema),
+      },
     });
 
-    const result = await generateObject({
-      model,
-      schema,
-      prompt,
-      system: systemPrompt,
-      temperature: config.temperature ?? 0.7,
-      maxTokens: config.maxTokens ?? 8192,
-    });
+    const result = await model.generateContent(prompt);
+    const responseText = result.response.text();
+    const parsed = JSON.parse(responseText);
 
-    return result.object;
+    return parsed;
   } catch (error) {
     console.error('Google AI structured generation error:', error);
     throw new Error(
@@ -76,23 +68,61 @@ export async function generateTextWithGoogle(
   systemPrompt?: string
 ): Promise<string> {
   try {
-    const model = google(config.model, {
-      apiKey: process.env.GEMINI_API_KEY,
+    const model = genAI.getGenerativeModel({
+      model: config.model,
+      systemInstruction: systemPrompt,
     });
 
-    const result = await generateText({
-      model,
-      prompt,
-      system: systemPrompt,
-      temperature: config.temperature ?? 0.7,
-      maxTokens: config.maxTokens ?? 8192,
-    });
-
-    return result.text;
+    const result = await model.generateContent(prompt);
+    return result.response.text();
   } catch (error) {
     console.error('Google AI text generation error:', error);
     throw new Error(
       `Failed to generate text with Google AI: ${error instanceof Error ? error.message : 'Unknown error'}`
     );
   }
+}
+
+function convertZodToJsonSchema(schema: z.ZodSchema): Record<string, any> {
+  if (schema instanceof z.ZodObject) {
+    const shape = schema.shape;
+    const properties: Record<string, any> = {};
+    const required: string[] = [];
+
+    for (const [key, value] of Object.entries(shape)) {
+      properties[key] = zodTypeToJsonSchema(value as z.ZodType);
+      if (!(value instanceof z.ZodOptional || value instanceof z.ZodNullable)) {
+        required.push(key);
+      }
+    }
+
+    return {
+      type: 'object',
+      properties,
+      required,
+    };
+  }
+
+  return { type: 'string' };
+}
+
+function zodTypeToJsonSchema(type: z.ZodType): Record<string, any> {
+  if (type instanceof z.ZodString) {
+    return { type: 'string' };
+  } else if (type instanceof z.ZodNumber) {
+    return { type: 'number' };
+  } else if (type instanceof z.ZodBoolean) {
+    return { type: 'boolean' };
+  } else if (type instanceof z.ZodArray) {
+    return {
+      type: 'array',
+      items: zodTypeToJsonSchema(type.element),
+    };
+  } else if (type instanceof z.ZodObject) {
+    return convertZodToJsonSchema(type);
+  } else if (type instanceof z.ZodOptional || type instanceof z.ZodNullable) {
+    return zodTypeToJsonSchema(type.unwrap());
+  }
+
+  return { type: 'string' };
 }
