@@ -206,12 +206,18 @@ export class ContentPlanOrchestrator {
 
     const items = generatedContent.map((content) => ({
       plan_id: plan.id,
+      user_id: userId,
       title: content.idea.title,
-      content: content.content,
+      content: {
+        script_content: content.content,
+        hashtags: content.hashtags || [],
+        metadata: content.metadata || {},
+      },
       platform: content.platform,
+      description: content.idea.description,
       status: 'idea' as ItemStatus,
-      scheduled_date: content.scheduledDate.toISOString(),
-    } as ContentItemFormData));
+      scheduled_date: content.scheduledDate.toISOString().split('T')[0],
+    }));
 
     const { data: contentItems, error: itemsError } = await supabase
       .from('content_items')

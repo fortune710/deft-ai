@@ -1,4 +1,7 @@
+import { xai } from '@ai-sdk/xai';
+import { generateObject, generateText } from 'ai';
 import { AIModelConfig, AIModelResponse } from '@/types/ai-models';
+import { z } from 'zod';
 
 export async function generateWithGrok(
   config: AIModelConfig,
@@ -59,5 +62,61 @@ export async function generateWithGrok(
   } catch (error) {
     console.error('Grok AI generation error:', error);
     throw new Error(`Failed to generate with Grok AI: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+export async function generateObjectWithGrok<T extends z.ZodSchema>(
+  config: AIModelConfig,
+  schema: T,
+  prompt: string,
+  systemPrompt?: string
+): Promise<z.infer<T>> {
+  try {
+    const model = xai(config.model, {
+      apiKey: process.env.XAI_API_KEY,
+    });
+
+    const result = await generateObject({
+      model,
+      schema,
+      prompt,
+      system: systemPrompt,
+      temperature: config.temperature ?? 0.7,
+      maxTokens: config.maxTokens ?? 8192,
+    });
+
+    return result.object;
+  } catch (error) {
+    console.error('Grok AI structured generation error:', error);
+    throw new Error(
+      `Failed to generate structured content with Grok AI: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
+  }
+}
+
+export async function generateTextWithGrok(
+  config: AIModelConfig,
+  prompt: string,
+  systemPrompt?: string
+): Promise<string> {
+  try {
+    const model = xai(config.model, {
+      apiKey: process.env.XAI_API_KEY,
+    });
+
+    const result = await generateText({
+      model,
+      prompt,
+      system: systemPrompt,
+      temperature: config.temperature ?? 0.7,
+      maxTokens: config.maxTokens ?? 8192,
+    });
+
+    return result.text;
+  } catch (error) {
+    console.error('Grok AI text generation error:', error);
+    throw new Error(
+      `Failed to generate text with Grok AI: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
   }
 }

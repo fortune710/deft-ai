@@ -10,6 +10,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@ai-sdk/google": "^3.0.1",
+    "@ai-sdk/xai": "^3.0.1",
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@google-cloud/speech": "^7.2.1",
     "@google/generative-ai": "^0.24.1",
