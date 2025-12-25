@@ -1,40 +1,99 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { EditorContent } from '@/types/script-chat';
 import { HookSelector } from './hook-selector';
 import { VisualTimeline } from './visual-timeline';
 import { EditorSection } from './editor-section';
 import { AddToContentButton } from './add-to-content-button';
+import { PlatformMetadataEditor } from './platform-metadata-editor';
+import { ThumbnailStrategyEditor } from './thumbnail-strategy-editor';
+import { VisualDirectionEditor } from './visual-direction-editor';
 import { Button } from '../ui/button';
 import { Copy, FileDown } from 'lucide-react';
 import { toast } from 'sonner';
+import { useUpdateItemContent } from '@/hooks/use-content-items';
 
 interface ScriptEditorProps {
   content: EditorContent;
   sessionId: string;
   onContentChange: (content: EditorContent) => void;
+  itemId?: string; // Optional: if provided, can save to content item
 }
 
-export function ScriptEditor({ content, sessionId, onContentChange }: ScriptEditorProps) {
-  const handleHookSelect = (hookId: string) => {
-    onContentChange({
-      ...content,
-      selectedHookId: hookId,
+export function ScriptEditor({ content, sessionId, onContentChange, itemId }: ScriptEditorProps) {
+  const [localContent, setLocalContent] = useState<EditorContent>(content);
+  const [hasChanges, setHasChanges] = useState<Record<string, boolean>>({});
+  const updateItemContent = useUpdateItemContent();
+
+  // Update local content when prop changes
+  useEffect(() => {
+    setLocalContent(content);
+    setHasChanges({});
+  }, [content]);
+
+  const handleContentUpdate = (updates: Partial<EditorContent>, changeKey: string) => {
+    const updated = { ...localContent, ...updates };
+    setLocalContent(updated);
+    setHasChanges((prev) => ({ ...prev, [changeKey]: true }));
+    onContentChange(updated);
+  };
+
+  const handleSave = async (changeKey: string, saveFn: () => Promise<void> | void) => {
+    try {
+      await saveFn();
+      setHasChanges((prev) => ({ ...prev, [changeKey]: false }));
+    } catch (error) {
+      console.error('Save error:', error);
+      throw error;
+    }
+  };
+
+  const handleSaveToItem = async (changeKey: string, contentUpdate: Partial<EditorContent>) => {
+    if (!itemId) return;
+    
+    const itemContentUpdate: any = {};
+    if (contentUpdate.fullScript !== undefined) {
+      itemContentUpdate.script_content = contentUpdate.fullScript;
+    }
+    if (contentUpdate.goalAlignedCTA !== undefined) {
+      itemContentUpdate.cta_suggestion = contentUpdate.goalAlignedCTA;
+    }
+    if (contentUpdate.platformMetadata?.captions !== undefined) {
+      itemContentUpdate.caption = contentUpdate.platformMetadata.captions;
+    }
+    if (contentUpdate.platformMetadata?.hashtags !== undefined) {
+      itemContentUpdate.hashtags = contentUpdate.platformMetadata.hashtags;
+    }
+
+    await updateItemContent.mutateAsync({
+      itemId,
+      content: itemContentUpdate,
     });
+  };
+
+  const handleHookSelect = (hookId: string) => {
+    handleContentUpdate({ selectedHookId: hookId }, 'hook');
   };
 
   const handleScriptChange = (newScript: string) => {
-    onContentChange({
-      ...content,
-      fullScript: newScript,
-    });
+    handleContentUpdate({ fullScript: newScript }, 'script');
   };
 
   const handleCTAChange = (newCTA: string) => {
-    onContentChange({
-      ...content,
-      goalAlignedCTA: newCTA,
-    });
+    handleContentUpdate({ goalAlignedCTA: newCTA }, 'cta');
+  };
+
+  const handlePlatformMetadataChange = (metadata: typeof content.platformMetadata) => {
+    handleContentUpdate({ platformMetadata: metadata }, 'platformMetadata');
+  };
+
+  const handleThumbnailStrategyChange = (strategy: typeof content.thumbnailStrategy) => {
+    handleContentUpdate({ thumbnailStrategy: strategy }, 'thumbnailStrategy');
+  };
+
+  const handleVisualDirectionChange = (visualDirection: typeof content.visualDirection) => {
+    handleContentUpdate({ visualDirection }, 'visualDirection');
   };
 
   const handleCopyAll = () => {
@@ -98,38 +157,83 @@ export function ScriptEditor({ content, sessionId, onContentChange }: ScriptEdit
       <EditorSection
         title="Full Script"
         description="30-60 second script with timing"
-        content={content.fullScript}
+        content={localContent.fullScript}
         onContentChange={handleScriptChange}
+        onSave={itemId ? () => handleSave('script', () => handleSaveToItem('script', { fullScript: localContent.fullScript })) : undefined}
+        hasChanges={hasChanges.script || false}
+        isSaving={updateItemContent.isPending}
         type="textarea"
       />
 
-      <VisualTimeline scenes={content.visualDirection} content={content} onContentChange={onContentChange} />
+      {
+        content.visualDirection.length > 0 && (
+          <EditorSection
+            title="Visual Direction"
+            description="Scene-by-scene breakdown with timing"
+            content={
+              <VisualDirectionEditor
+                value={localContent.visualDirection}
+                onChange={handleVisualDirectionChange}
+              />
+            }
+            onSave={itemId ? () => handleSave('visualDirection', () => handleSaveToItem('visualDirection', { visualDirection: localContent.visualDirection })) : undefined}
+            hasChanges={hasChanges.visualDirection || false}
+            isSaving={updateItemContent.isPending}
+            type="custom"
+          />
+        )
+      }
 
       <EditorSection
         title="Call to Action"
         description="Goal-aligned CTA"
-        content={content.goalAlignedCTA}
+        content={localContent.goalAlignedCTA}
         onContentChange={handleCTAChange}
+        onSave={itemId ? () => handleSave('cta', () => handleSaveToItem('cta', { goalAlignedCTA: localContent.goalAlignedCTA })) : undefined}
+        hasChanges={hasChanges.cta || false}
+        isSaving={updateItemContent.isPending}
         type="text"
       />
 
-      <EditorSection
-        title="Thumbnail Strategy"
-        description="Image prompt and text overlays"
-        content={JSON.stringify(content.thumbnailStrategy, null, 2)}
-        type="display"
-      />
+      {
+        content.thumbnailStrategy.imagePrompt !== '' && (
+          <EditorSection
+            title="Thumbnail Strategy"
+            description="Image prompt and text overlays"
+            content={
+              <ThumbnailStrategyEditor
+                value={localContent.thumbnailStrategy}
+                onChange={handleThumbnailStrategyChange}
+              />
+            }
+            onSave={itemId ? () => handleSave('thumbnailStrategy', () => handleSaveToItem('thumbnailStrategy', { thumbnailStrategy: localContent.thumbnailStrategy })) : undefined}
+            hasChanges={hasChanges.thumbnailStrategy || false}
+            isSaving={updateItemContent.isPending}
+            type="custom"
+          />
+        )
+      }
+
 
       <EditorSection
         title="Platform Metadata"
         description="Caption, hashtags, and platform notes"
-        content={JSON.stringify(content.platformMetadata, null, 2)}
-        type="display"
+        content={
+          <PlatformMetadataEditor
+            value={localContent.platformMetadata}
+            onChange={handlePlatformMetadataChange}
+          />
+        }
+        onSave={itemId ? () => handleSave('platformMetadata', () => handleSaveToItem('platformMetadata', { platformMetadata: localContent.platformMetadata })) : undefined}
+        hasChanges={hasChanges.platformMetadata || false}
+        isSaving={updateItemContent.isPending}
+        type="custom"
       />
-
-      <div className="text-sm text-muted-foreground text-center py-4">
-        Estimated Duration: {content.estimatedDuration}
-      </div>
+      {content.estimatedDuration && (
+        <div className="text-sm text-muted-foreground text-center py-4">
+          Estimated Duration: {content.estimatedDuration}
+        </div>
+      )}
     </div>
   );
 }

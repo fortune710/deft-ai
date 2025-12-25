@@ -12,6 +12,9 @@ interface VisualTimelineProps {
 }
 
 export function VisualTimeline({ scenes, content, onContentChange }: VisualTimelineProps) {
+  
+  if (scenes.length === 0) return null;
+
   return (
     <Card>
       <CardHeader>
