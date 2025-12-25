@@ -10,31 +10,43 @@ import {
   FileText,
   Settings,
   LogOut,
-  LayoutDashboard,
   Video,
+  Calendar as CalendarIcon,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
+import type { LucideIcon } from 'lucide-react';
 
-const navItems = [
-  {
-    title: 'Dashboard',
-    href: '/',
-    icon: LayoutDashboard,
-  },
+interface NavItem {
+  title: string;
+  href: string;
+  icon: LucideIcon;
+  visible?: boolean; // true = always visible, false = only in development, undefined = only in development
+}
+
+const navItems: NavItem[] = [
   {
     title: 'Content Engine',
     href: '/content-engine',
     icon: Sparkles,
+    visible: true, // Always visible
+  },
+  {
+    title: 'Calendar',
+    href: '/calendar',
+    icon: CalendarIcon,
+    visible: true, // Always visible in production
   },
   {
     title: 'Script Creator',
     href: '/script-creator',
     icon: FileText,
+    visible: false, // Only visible in development
   },
   {
     title: 'Video Analytics',
     href: '/video-analytics',
     icon: Video,
+    visible: false, // Only visible in development
   },
 ];
 
@@ -63,23 +75,34 @@ export function AppSidebar() {
 
       <ScrollArea className="flex-1 px-3 py-4">
         <div className="space-y-1">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = pathname === item.href;
-            return (
-              <Button
-                key={item.href}
-                variant={isActive ? 'secondary' : 'ghost'}
-                className="w-full justify-start"
-                asChild
-              >
-                <Link href={item.href}>
-                  <Icon className="mr-2 h-4 w-4" />
-                  {item.title}
-                </Link>
-              </Button>
-            );
-          })}
+          {navItems
+            .filter((item) => {
+              // Content Engine is always visible
+              if (item.visible === true) return true;
+              // Other items are only visible in development
+              if (item.visible === false) {
+                return process.env.NODE_ENV === 'development';
+              }
+              // Default: show in development
+              return process.env.NODE_ENV === 'development';
+            })
+            .map((item) => {
+              const Icon = item.icon;
+              const isActive = pathname === item.href;
+              return (
+                <Button
+                  key={item.href}
+                  variant={isActive ? 'secondary' : 'ghost'}
+                  className="w-full justify-start"
+                  asChild
+                >
+                  <Link href={item.href}>
+                    <Icon className="mr-2 h-4 w-4" />
+                    {item.title}
+                  </Link>
+                </Button>
+              );
+            })}
         </div>
 
         <Separator className="my-4" />
