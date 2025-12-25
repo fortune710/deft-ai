@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { zodResponseFormat } from 'openai/helpers/zod';
 import { AIModelConfig, AIModelResponse } from '@/types/ai-models';
 import { z } from 'zod';
 
@@ -19,11 +20,11 @@ export async function generateWithGrok(
       throw new Error('XAI_API_KEY environment variable is not set');
     }
 
-    const messages: OpenAI.MessageParam[] = [];
+    const messages: OpenAI.ChatCompletionMessageParam[] = [];
 
     if (systemPrompt) {
       messages.push({
-        role: 'user',
+        role: 'system',
         content: systemPrompt,
       });
     }
@@ -33,25 +34,21 @@ export async function generateWithGrok(
       content: prompt,
     });
 
-    const response = await client.messages.create({
+    const response = await client.chat.completions.create({
       model: config.model,
       messages,
       max_tokens: config.maxTokens ?? 8192,
       temperature: config.temperature ?? 0.7,
     });
 
-    const text = response.content
-      .filter((block) => block.type === 'text')
-      .map((block) => (block as any).text)
-      .join('');
+    const text = response.choices[0]?.message?.content || '';
 
     return {
       content: text,
       usage: {
-        promptTokens: response.usage?.input_tokens,
-        completionTokens: response.usage?.output_tokens,
-        totalTokens:
-          (response.usage?.input_tokens ?? 0) + (response.usage?.output_tokens ?? 0),
+        promptTokens: response.usage?.prompt_tokens,
+        completionTokens: response.usage?.completion_tokens,
+        totalTokens: response.usage?.total_tokens,
       },
     };
   } catch (error) {
@@ -73,11 +70,11 @@ export async function generateObjectWithGrok<T extends z.ZodSchema>(
       throw new Error('XAI_API_KEY environment variable is not set');
     }
 
-    const messages: OpenAI.MessageParam[] = [];
+    const messages: OpenAI.ChatCompletionMessageParam[] = [];
 
     if (systemPrompt) {
       messages.push({
-        role: 'user',
+        role: 'system',
         content: systemPrompt,
       });
     }
@@ -87,19 +84,20 @@ export async function generateObjectWithGrok<T extends z.ZodSchema>(
       content: prompt,
     });
 
-    const response = await client.messages.create({
+    const response = await client.beta.chat.completions.parse({
       model: config.model,
       messages,
+      response_format: zodResponseFormat(schema, 'response'),
       max_tokens: config.maxTokens ?? 8192,
       temperature: config.temperature ?? 0.7,
     });
 
-    const text = response.content
-      .filter((block) => block.type === 'text')
-      .map((block) => (block as any).text)
-      .join('');
+    const parsed = response.choices[0]?.message?.parsed;
 
-    const parsed = JSON.parse(text);
+    if (!parsed) {
+      throw new Error('Failed to parse structured response from Grok');
+    }
+
     return parsed;
   } catch (error) {
     console.error('Grok AI structured generation error:', error);
@@ -121,11 +119,11 @@ export async function generateTextWithGrok(
       throw new Error('XAI_API_KEY environment variable is not set');
     }
 
-    const messages: OpenAI.MessageParam[] = [];
+    const messages: OpenAI.ChatCompletionMessageParam[] = [];
 
     if (systemPrompt) {
       messages.push({
-        role: 'user',
+        role: 'system',
         content: systemPrompt,
       });
     }
@@ -135,17 +133,14 @@ export async function generateTextWithGrok(
       content: prompt,
     });
 
-    const response = await client.messages.create({
+    const response = await client.chat.completions.create({
       model: config.model,
       messages,
       max_tokens: config.maxTokens ?? 8192,
       temperature: config.temperature ?? 0.7,
     });
 
-    return response.content
-      .filter((block) => block.type === 'text')
-      .map((block) => (block as any).text)
-      .join('');
+    return response.choices[0]?.message?.content || '';
   } catch (error) {
     console.error('Grok AI text generation error:', error);
     throw new Error(
