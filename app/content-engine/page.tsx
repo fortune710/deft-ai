@@ -10,6 +10,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useContentProfile } from '@/hooks/use-content-profile';
 import { useActivePlan } from '@/hooks/use-content-plans';
 import { useContentItems } from '@/hooks/use-content-items';
+import { useQueryClient } from '@tanstack/react-query';
 import { MobileListView } from '@/components/content-engine/mobile-list-view';
 import { GeneratePlanDialog } from '@/components/content-engine/generate-plan-dialog';
 import { PlanSelector } from '@/components/content-engine/plan-selector';
@@ -30,6 +31,7 @@ const ListView = dynamic(() => import('@/components/content-engine/list-view').t
 
 export default function ContentEnginePage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { profile, isLoading: profileLoading } = useContentProfile();
   const { data: activePlan, isLoading: planLoading } = useActivePlan();
   const { data: items = [], isLoading: itemsLoading } = useContentItems(activePlan?.id || null);
@@ -62,6 +64,10 @@ export default function ContentEnginePage() {
 
   const handlePlanGenerated = (planId: string) => {
     setGenerateDialogOpen(false);
+    // Immediately refresh plan + items so the UI reflects the new active plan.
+    queryClient.invalidateQueries({ queryKey: ['content-plans'] });
+    queryClient.invalidateQueries({ queryKey: ['content-plans', 'active'] });
+    queryClient.invalidateQueries({ queryKey: ['content-items'] });
   };
 
   if (profileLoading || planLoading) {

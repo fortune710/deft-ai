@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { format, addDays } from 'date-fns';
+import { format } from 'date-fns';
 import { Calendar as CalendarIcon, Sparkles, Loader2 } from 'lucide-react';
 import {
   Dialog,
@@ -52,10 +52,20 @@ export function GeneratePlanDialog({ open, onOpenChange, onSuccess }: GeneratePl
   const [isGenerating, setIsGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
   const [progressMessage, setProgressMessage] = useState('');
-  const [progressDetails, setProgressDetails] = useState('');
-  const [currentAgent, setCurrentAgent] = useState('');
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
   const { profile } = useContentProfile();
+
+  const friendlyStatus = useMemo(() => {
+    if (!isGenerating) return '';
+
+    // Keep these intentionally vague and user-friendly (no agents, no workflow disclosure).
+    if (progress < 20) return 'Getting things ready…';
+    if (progress < 45) return 'Generating ideas tailored to you…';
+    if (progress < 70) return 'Shaping your 30-day plan…';
+    if (progress < 90) return 'Polishing details and spacing posts…';
+    return 'Saving your plan…';
+  }, [isGenerating, progress]);
 
   const {
     register,
@@ -106,9 +116,7 @@ export function GeneratePlanDialog({ open, onOpenChange, onSuccess }: GeneratePl
 
     setIsGenerating(true);
     setProgress(0);
-    setProgressMessage('Starting content generation');
-    setProgressDetails('');
-    setCurrentAgent('Orchestrator');
+    setProgressMessage('Generating your 30-day plan…');
 
     try {
       const response = await fetch('/api/content/generate-plan', {
@@ -152,10 +160,7 @@ export function GeneratePlanDialog({ open, onOpenChange, onSuccess }: GeneratePl
 
             setProgress(data.progress);
             setProgressMessage(data.message);
-            setProgressDetails(data.details || '');
-            if (data.agent) {
-              setCurrentAgent(data.agent);
-            }
+            // Intentionally do not surface internal workflow/agent details in the UI.
 
             if (data.phase === 'complete' && data.contentPlan) {
               toast.success('Content plan created successfully!');
@@ -173,8 +178,6 @@ export function GeneratePlanDialog({ open, onOpenChange, onSuccess }: GeneratePl
       setIsGenerating(false);
       setProgress(0);
       setProgressMessage('');
-      setProgressDetails('');
-      setCurrentAgent('');
     }
   };
 
@@ -197,45 +200,20 @@ export function GeneratePlanDialog({ open, onOpenChange, onSuccess }: GeneratePl
               <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
             </div>
             <div className="text-center space-y-3">
-              {currentAgent && (
-                <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-100 dark:bg-blue-900/30 rounded-full text-sm font-medium text-blue-700 dark:text-blue-300">
-                  <Sparkles className="h-4 w-4" />
-                  {currentAgent}
-                </div>
-              )}
-              <p className="font-semibold text-lg">{progressMessage}</p>
+              <p className="font-semibold text-lg">{progressMessage || 'Generating your plan…'}</p>
+              <p className="text-sm text-muted-foreground">{friendlyStatus}</p>
               <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
                 <div
                   className="bg-blue-600 h-3 rounded-full transition-all duration-500"
                   style={{ width: `${progress}%` }}
                 />
               </div>
-              <div className="flex items-center justify-between text-xs text-gray-500">
+              <div className="flex items-center justify-center text-xs text-gray-500">
                 <span>{Math.round(progress)}%</span>
-                <span>Step {Math.ceil(progress / 33)} of 3</span>
               </div>
-              {progressDetails && (
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
-                  {progressDetails}
-                </p>
-              )}
-              <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg text-left space-y-2">
-                <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">What's happening:</p>
-                <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
-                  <p className={progress >= 0 && progress < 45 ? 'font-semibold text-blue-600' : ''}>
-                    ✓ Agent 1: Generating 200+ scroll-stopping ideas
-                  </p>
-                  <p className={progress >= 45 && progress < 65 ? 'font-semibold text-blue-600' : ''}>
-                    {progress >= 45 ? '✓' : '○'} Agent 2: Scoring and selecting best 30
-                  </p>
-                  <p className={progress >= 65 && progress < 95 ? 'font-semibold text-blue-600' : ''}>
-                    {progress >= 65 ? '✓' : '○'} Agent 3: Creating platform-specific content
-                  </p>
-                  <p className={progress >= 95 ? 'font-semibold text-blue-600' : ''}>
-                    {progress >= 95 ? '✓' : '○'} Saving to your content calendar
-                  </p>
-                </div>
-              </div>
+              <p className="text-xs text-muted-foreground pt-2">
+                This can take a minute. You can keep this window open while we finish.
+              </p>
             </div>
           </div>
         ) : (
@@ -254,7 +232,7 @@ export function GeneratePlanDialog({ open, onOpenChange, onSuccess }: GeneratePl
 
             <div className="space-y-2">
               <Label>Start Date</Label>
-              <Popover>
+              <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
                 <PopoverTrigger asChild>
                   <Button
                     type="button"
@@ -265,11 +243,16 @@ export function GeneratePlanDialog({ open, onOpenChange, onSuccess }: GeneratePl
                     {selectedDate ? format(selectedDate, 'PPP') : 'Pick a date'}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
+                <PopoverContent className="w-auto p-0" align="start">
                   <Calendar
                     mode="single"
                     selected={selectedDate}
-                    onSelect={(date) => date && setValue('start_date', date)}
+                    onSelect={(date) => {
+                      if (date) {
+                        setValue('start_date', date);
+                        setCalendarOpen(false);
+                      }
+                    }}
                     initialFocus
                   />
                 </PopoverContent>
