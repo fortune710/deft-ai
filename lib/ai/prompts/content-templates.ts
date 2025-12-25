@@ -141,11 +141,27 @@ export function buildContentGenerationPrompt(
   const template = PLATFORM_CONTENT_TEMPLATES[platform.toLowerCase()] || PLATFORM_CONTENT_TEMPLATES.twitter;
   const platformContext = buildPlatformContext(platform);
   const engagementStrategy = getEngagementStrategy(platform);
+  const isTwitter = platform.toLowerCase() === 'twitter';
 
   return `
 You are an expert ${platform} content creator specializing in ${niche} content for ${targetAudience}.
 
 ${platformContext}
+
+${isTwitter ? `CRITICAL TWITTER THREAD REQUIREMENT:
+You MUST generate a COMPLETE Twitter thread with 3-10 tweets.
+- DO NOT generate only one tweet
+- Include all tweets in the script_content field
+- Each tweet on a separate line
+- Number each tweet (1/X, 2/X, etc.)
+- Every single tweet must be included in your response
+- Example format:
+  1/5 Hook tweet here...
+  2/5 Context tweet here...
+  3/5 Value tweet here...
+  4/5 More value here...
+  5/5 CTA tweet here...
+` : ''}
 
 CONTENT IDEA TO DEVELOP:
 Title: ${idea.title}
@@ -216,6 +232,10 @@ function getSchemaInstructions(platform: string): string {
 
   switch (platformLower) {
     case 'twitter':
+      return `{
+  "script_content": "Complete thread with ALL tweets (3-10 tweets). Format each tweet on separate lines with thread number prefix (1/X, 2/X, etc.). Keep each tweet under 280 characters. Example:\\n1/5 Hook tweet...\\n2/5 Context tweet...\\n3/5 Value tweet...",
+  "hashtags": ["array", "of", "hashtags"]
+}`;
     case 'linkedin':
       return `{
   "script_content": "The main post content",
@@ -259,11 +279,15 @@ function getPlatformFormattingGuide(platform: string): string {
   switch (platform.toLowerCase()) {
     case 'twitter':
       return `
+- GENERATE A COMPLETE THREAD (3-10 tweets minimum)
+- INCLUDE ALL TWEETS IN THE RESPONSE
 - Each tweet on a new line
+- Start each tweet with thread number: "1/X", "2/X", etc.
+- Keep each individual tweet under 280 characters
+- Make each tweet self-contained and quotable
+- Build momentum across tweets
+- End final tweet with engaging CTA
 - Use line breaks within tweets for readability
-- Number tweets if thread (1/7, 2/7, etc.)
-- Keep tweets under 280 characters
-- End with engaging CTA
       `.trim();
 
     case 'instagram':

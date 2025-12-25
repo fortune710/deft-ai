@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
 export const TwitterContentSchema = z.object({
-  script_content: z.string().describe('The main tweet thread content'),
-  hashtags: z.array(z.string()).describe('Relevant hashtags for the tweet'),
+  script_content: z.string().describe('Complete Twitter thread with all tweets (3-10 tweets). Each tweet should be numbered (1/X, 2/X, etc.) and separated by line breaks. Keep each tweet under 280 characters. Include all tweets in this single field.'),
+  hashtags: z.array(z.string()).describe('Relevant hashtags for the thread (without # symbol)'),
 });
 
 export const LinkedInContentSchema = z.object({
