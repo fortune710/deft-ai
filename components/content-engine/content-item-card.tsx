@@ -1,8 +1,9 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
-import { MoreVertical, Calendar, Trash2, Copy, Eye } from 'lucide-react';
+import { MoreVertical, Calendar, Trash2, Copy, Eye, Edit2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -11,7 +12,19 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { useUpdateContentItem } from '@/hooks/use-content-items';
+import { toast } from 'sonner';
 import type { ContentItem } from '@/types/content-engine';
 
 interface ContentItemCardProps {
@@ -48,6 +61,15 @@ export function ContentItemCard({
   isDragging = false,
 }: ContentItemCardProps) {
   const router = useRouter();
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [newTitle, setNewTitle] = useState(item.title);
+  const updateItem = useUpdateContentItem();
+
+  // Sync title when item changes
+  useEffect(() => {
+    setNewTitle(item.title);
+  }, [item.title]);
+
   const scheduledDate = new Date(item.scheduled_date);
   const formattedDate = format(scheduledDate, 'MMM d');
   const daysUntil = Math.ceil((scheduledDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
@@ -59,6 +81,38 @@ export function ContentItemCard({
   const handleMenuEdit = (e: React.MouseEvent) => {
     e.stopPropagation();
     onEdit(item);
+  };
+
+  const handleRenameSelect = (e: Event) => {
+    // Radix DropdownMenu uses `onSelect` (Event), not React.MouseEvent.
+    e.preventDefault();
+    e.stopPropagation?.();
+    setNewTitle(item.title);
+    setRenameDialogOpen(true);
+  };
+
+  const handleRename = async () => {
+    if (!newTitle.trim()) {
+      toast.error('Title cannot be empty');
+      return;
+    }
+
+    if (newTitle.trim() === item.title) {
+      setRenameDialogOpen(false);
+      return;
+    }
+
+    try {
+      await updateItem.mutateAsync({
+        itemId: item.id,
+        updates: { title: newTitle.trim() },
+      });
+      toast.success('Content item renamed');
+      setRenameDialogOpen(false);
+    } catch (error) {
+      console.error('Error renaming item:', error);
+      toast.error('Failed to rename content item');
+    }
   };
 
   return (
@@ -84,16 +138,33 @@ export function ContentItemCard({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={handleMenuEdit}>
+            {/* <DropdownMenuItem onClick={handleMenuEdit}>
               <Eye className="mr-2 h-4 w-4" />
               View Details
+            </DropdownMenuItem> */}
+            <DropdownMenuItem onSelect={handleRenameSelect}>
+              <Edit2 className="mr-2 h-4 w-4" />
+              Rename
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDuplicate(item.id); }}>
+            <DropdownMenuItem
+              onSelect={(e) => {
+                e.preventDefault();
+                e.stopPropagation?.();
+                onDuplicate(item.id);
+              }}
+            >
               <Copy className="mr-2 h-4 w-4" />
               Duplicate
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDelete(item.id); }} className="text-red-600">
+            <DropdownMenuItem
+              className="text-red-600"
+              onSelect={(e) => {
+                e.preventDefault();
+                e.stopPropagation?.();
+                onDelete(item.id);
+              }}
+            >
               <Trash2 className="mr-2 h-4 w-4" />
               Delete
             </DropdownMenuItem>
@@ -118,6 +189,62 @@ export function ContentItemCard({
           </span>
         )}
       </div>
+
+      {/* Non-modal so it won't lock pointer-events on the whole app (and avoids DnD + modal issues) */}
+      <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen} modal={false}>
+        <DialogContent
+          className="sm:max-w-[425px]"
+          // Prevent outside-click dismiss so clicks don't \"fall through\" to the card (causing navigation)
+          onInteractOutside={(e) => e.preventDefault()}
+          onPointerDownOutside={(e) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>Rename Content Item</DialogTitle>
+            <DialogDescription>
+              Enter a new title for this content item.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="title">Title</Label>
+              <Textarea
+                id="title"
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  // Use Cmd/Ctrl+Enter to save (Enter inserts newline in textarea)
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault();
+                    handleRename();
+                  }
+                }}
+                placeholder="Enter content item title"
+                autoFocus
+                rows={3}
+              />
+              <p className="text-xs text-muted-foreground">
+                Tip: Press <span className="font-medium">Ctrl/⌘ + Enter</span> to save.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setRenameDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleRename}
+              disabled={updateItem.isPending || !newTitle.trim()}
+            >
+              {updateItem.isPending ? 'Saving...' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
