@@ -70,7 +70,7 @@ export function AppSidebar() {
   return (
     <div className="flex h-screen w-64 flex-col border-r bg-sidebar">
       <div className="flex h-14 items-center border-b px-6">
-        <h2 className="text-lg font-semibold">Content Engine</h2>
+        <h2 className="text-lg font-semibold">Deft</h2>
       </div>
 
       <ScrollArea className="flex-1 px-3 py-4">

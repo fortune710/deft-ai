@@ -34,7 +34,7 @@ export default function Home() {
             <div className="bg-primary text-primary-foreground flex size-8 items-center justify-center rounded-md">
               <Sparkles className="size-5" />
             </div>
-            <span>Content Engine</span>
+            <span>Deft</span>
           </div>
           <div className="flex gap-4">
             <Suspense
