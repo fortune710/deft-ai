@@ -4,13 +4,16 @@ import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { Sparkles, LayoutGrid, List, Smartphone, Loader2 } from 'lucide-react';
+import { useMemo } from 'react';
 import { AppLayout } from '@/components/app-layout';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useContentProfile } from '@/hooks/use-content-profile';
 import { useActivePlan } from '@/hooks/use-content-plans';
 import { useContentItems } from '@/hooks/use-content-items';
+import { useContentEngineProgress } from '@/hooks/use-content-engine-progress';
 import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { MobileListView } from '@/components/content-engine/mobile-list-view';
 import { GeneratePlanDialog } from '@/components/content-engine/generate-plan-dialog';
 import { GeneratePlanButton } from '@/components/content-engine/generate-plan-button';
@@ -19,6 +22,7 @@ import { ArchivedPlansDialog } from '@/components/content-engine/archived-plans-
 import { BoardViewSkeleton } from '@/components/content-engine/board-view-skeleton';
 import { ListViewSkeleton } from '@/components/content-engine/list-view-skeleton';
 import type { ViewMode } from '@/types/content-engine';
+import { Progress } from '@/components/ui/progress';
 
 const BoardView = dynamic(() => import('@/components/content-engine/board-view').then(mod => ({ default: mod.BoardView })), {
   ssr: false,
@@ -36,6 +40,7 @@ export default function ContentEnginePage() {
   const { profile, isLoading: profileLoading } = useContentProfile();
   const { data: activePlan, isLoading: planLoading } = useActivePlan();
   const { data: items = [], isLoading: itemsLoading } = useContentItems(activePlan?.id || null);
+  const { progress, isGenerating } = useContentEngineProgress();
 
   const [viewMode, setViewMode] = useState<ViewMode>('board');
   const [isMobile, setIsMobile] = useState(false);
@@ -70,6 +75,72 @@ export default function ContentEnginePage() {
     queryClient.invalidateQueries({ queryKey: ['content-plans', 'active'] });
     queryClient.invalidateQueries({ queryKey: ['content-items'] });
   };
+
+  // Handle completion when progress is deleted
+  useEffect(() => {
+    if (!isGenerating && progress === null) {
+      // Generation completed, refresh plans
+      queryClient.invalidateQueries({ queryKey: ['content-plans'] });
+      queryClient.invalidateQueries({ queryKey: ['content-plans', 'active'] });
+      queryClient.invalidateQueries({ queryKey: ['content-items'] });
+    }
+  }, [isGenerating, progress, queryClient]);
+
+  const currentProgress = progress?.progress || 0;
+  const progressMessage = progress?.message || 'Generating your plan…';
+
+  const friendlyStatus = useMemo(() => {
+    if (!isGenerating) return '';
+
+    // Keep these intentionally vague and user-friendly (no agents, no workflow disclosure).
+    if (currentProgress < 20) return 'Getting things ready…';
+    if (currentProgress < 45) return 'Generating ideas tailored to you…';
+    if (currentProgress < 70) return 'Shaping your 30-day plan…';
+    if (currentProgress < 90) return 'Polishing details and spacing posts…';
+    return 'Saving your plan…';
+  }, [isGenerating, currentProgress]);
+
+  // Manage persistent toast for content generation progress
+  useEffect(() => {
+    const toastId = 'content-generation-progress';
+
+    if (isGenerating) {
+      // Show or update the toast with progress
+      // Using toast.loading with the same ID will update the existing toast
+      toast.loading(
+        <div className="space-y-2 w-full">
+          <p className="font-semibold text-sm">{progressMessage}</p>
+          {friendlyStatus && (
+            <p className="text-xs text-muted-foreground">{friendlyStatus}</p>
+          )}
+          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mt-2">
+            <Progress 
+              value={currentProgress}
+              className="h-2 rounded-full transition-all duration-500"
+            />
+          </div>
+          <div className="flex items-center justify-between text-xs text-muted-foreground mt-1">
+            <span>{Math.round(currentProgress)}%</span>
+            <span className="text-[10px]">This may take a while</span>
+          </div>
+        </div>,
+        {
+          id: toastId,
+          duration: Infinity, // Keep it persistent
+        }
+      );
+    } else {
+      // Dismiss the toast when generation is complete
+      toast.dismiss(toastId);
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (!isGenerating) {
+        toast.dismiss(toastId);
+      }
+    };
+  }, [isGenerating, currentProgress, progressMessage, friendlyStatus]);
 
   if (profileLoading || planLoading) {
     return (
