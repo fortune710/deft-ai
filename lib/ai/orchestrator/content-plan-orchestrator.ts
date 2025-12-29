@@ -3,7 +3,8 @@ import { IdeaGeneratorAgent } from '../agents/idea-generator';
 import { IdeaReviewerAgent } from '../agents/idea-reviewer';
 import { ContentGeneratorAgent } from '../agents/content-generator';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { ContentPlan, ContentItem, ContentItemFormData, ItemStatus } from '@/types/content-engine';
+import { ContentPlan, ContentItem, ItemStatus, PublishPlanPayload, Platform } from '@/types/content-engine';
+import { SupabaseClient } from '@supabase/supabase-js';
 
 interface OrchestratorConfig {
   userId: string;
@@ -34,7 +35,7 @@ export class ContentPlanOrchestrator {
     this.onProgress = onProgress;
   }
 
-  async execute(config: OrchestratorConfig): Promise<ContentPlan> {
+  async execute(config: OrchestratorConfig): Promise<{ message: string, planId: string }> {
     this.reportProgress({
       phase: 'initialization',
       progress: 0,
@@ -151,7 +152,8 @@ export class ContentPlanOrchestrator {
     const contentPlan = await this.saveToDatabase(
       config.userId,
       config.planName,
-      contentResult.generatedContent
+      contentResult.generatedContent,
+      config.platforms
     );
 
     this.reportProgress({
@@ -174,38 +176,33 @@ export class ContentPlanOrchestrator {
   private async saveToDatabase(
     userId: string,
     planName: string,
-    generatedContent: any[]
-  ): Promise<ContentPlan> {
-    const supabase = await createServerSupabaseClient();
+    generatedContent: any[],
+    allowedPlatforms: string[]
+  ): Promise<{ message: string, planId: string }> {
+    // Filter content to only include specified platforms (safety check)
+    const filteredContent = generatedContent.filter((content) =>
+      allowedPlatforms.includes(content.platform?.toLowerCase())
+    );
 
-    await supabase.from('content_plans')
-    .update({
-      is_active: false,
-      archived_at: new Date().toISOString(),
-    })
-    .eq('user_id', userId)
-    .eq('is_active', true);
-
-    const { data: plan, error: planError } = await supabase
-      .from('content_plans')
-      .insert({
-        user_id: userId,
-        title: planName,
-        is_active: true,
-        start_date: generatedContent[0]?.scheduledDate || new Date(),
-        end_date: generatedContent[generatedContent.length - 1]?.scheduledDate || new Date(),
-      })
-      .select()
-      .single();
-
-    if (planError || !plan) {
-      throw new Error(`Failed to create content plan: ${planError?.message}`);
+    if (filteredContent.length === 0) {
+      throw new Error('No content generated for the specified platforms');
     }
 
-    console.log('generatedContent', generatedContent);
+    const plan = {
+      user_id: userId,
+      title: planName,
+      is_active: true,
+      start_date: filteredContent[0]?.scheduledDate || new Date(),
+      end_date: filteredContent[filteredContent.length - 1]?.scheduledDate || new Date(),
+      platforms: allowedPlatforms as Platform[],
+      description: null,
+      archived_at: null,
+    }
 
-    const items = generatedContent.map((content) => ({
-      plan_id: plan.id,
+
+    console.log('generatedContent', filteredContent);
+
+    const items = filteredContent.map((content) => ({
       user_id: userId,
       title: content.idea.title,
       content: {
@@ -217,21 +214,29 @@ export class ContentPlanOrchestrator {
       description: content.idea.description,
       status: 'idea' as ItemStatus,
       scheduled_date: content.scheduledDate.toISOString().split('T')[0],
+      position: content?.position || 0,
     }));
 
-    const { data: contentItems, error: itemsError } = await supabase
-      .from('content_items')
-      .insert(items)
-      .select();
 
-    if (itemsError) {
-      console.error('Error creating content items:', itemsError);
-      throw new Error(`Failed to create content items: ${itemsError.message}`);
-    }
 
-    return {
-      ...plan,
-      items: contentItems as ContentItem[],
+    const publishPayload: PublishPlanPayload = {
+      contentPlan: plan,
+      contentItems: items,
+      userId: userId,
     };
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+    const apiUrl = `${appUrl}/api/content/publish-plan`;
+    
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      body: JSON.stringify(publishPayload),
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to publish plan: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    return data;
   }
 }
