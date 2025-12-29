@@ -15,7 +15,6 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 
 const AuthNavButtons = dynamic(() => import('@/components/auth-nav-buttons').then(mod => ({ default: mod.AuthNavButtons })), {
-  ssr: false,
   loading: () => (
     <div className="flex gap-4">
       <Skeleton className="h-10 w-20 rounded-md" />

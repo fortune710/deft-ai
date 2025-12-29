@@ -1,5 +1,6 @@
 import './globals.css';
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import { Inter } from 'next/font/google';
 import { ThemeProvider } from '@/components/theme-provider';
 import { QueryProvider } from '@/components/query-provider';
@@ -45,7 +46,9 @@ export default function RootLayout({
         >
           <PHProvider>
             <QueryProvider>
-              <PostHogPageView />
+              <Suspense fallback={null}>
+                <PostHogPageView />
+              </Suspense>
               {children}
               <Toaster />
               <SonnerToaster position="top-right" />
