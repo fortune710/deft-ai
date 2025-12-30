@@ -72,3 +72,12 @@ export interface PlanStats {
   published: number;
   upcoming: number;
 }
+
+type TContentPlan = Omit<ContentPlan, 'id' | 'created_at' | 'updated_at'>;
+type TContentItem = Omit<ContentItem, 'id' | 'created_at' | 'updated_at' | 'plan_id'>;
+
+export interface PublishPlanPayload {
+  contentPlan: TContentPlan;
+  contentItems: TContentItem[];
+  userId: string;
+}

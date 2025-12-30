@@ -1,9 +1,10 @@
 import { AgentContext, AgentProgress } from '@/types/ai-agents';
-import { IdeaGeneratorAgent } from '../agents/idea-generator';
-import { IdeaReviewerAgent } from '../agents/idea-reviewer';
+import { IdeaGeneratorAgent } from '@/lib/ai/agents/idea-generator';
+import { IdeaReviewerAgent } from '@/lib/ai/agents/idea-reviewer';
 import { ContentGeneratorAgent } from '../agents/content-generator';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { ContentPlan, ContentItem, ContentItemFormData, ItemStatus } from '@/types/content-engine';
+import { ItemStatus, Platform } from '@/types/content-engine';
+import { createClient } from '@supabase/supabase-js';
+import jwt from 'jsonwebtoken';
 
 interface OrchestratorConfig {
   userId: string;
@@ -34,7 +35,7 @@ export class ContentPlanOrchestrator {
     this.onProgress = onProgress;
   }
 
-  async execute(config: OrchestratorConfig): Promise<ContentPlan> {
+  async execute(config: OrchestratorConfig): Promise<{ message: string, planId: string }> {
     this.reportProgress({
       phase: 'initialization',
       progress: 0,
@@ -65,7 +66,7 @@ export class ContentPlanOrchestrator {
       phase: 'idea_generation',
       progress: 10,
       message: 'Starting Agent 1: Idea Generator',
-      details: 'Generating 200+ scroll-stopping content ideas',
+      details: 'Generating 100 scroll-stopping content ideas',
       agent: 'Idea Generator',
     });
 
@@ -151,7 +152,8 @@ export class ContentPlanOrchestrator {
     const contentPlan = await this.saveToDatabase(
       config.userId,
       config.planName,
-      contentResult.generatedContent
+      contentResult.generatedContent,
+      config.platforms
     );
 
     this.reportProgress({
@@ -171,41 +173,64 @@ export class ContentPlanOrchestrator {
     }
   }
 
+  private getToken(userId: string): string {
+    if (!userId) {
+      throw new Error("User ID is required");
+    }
+
+    const jwtSecret = process.env.SUPABASE_JWT_SECRET!;
+    if (!jwtSecret) {
+      throw new Error("JWT secret is required");
+    }
+    
+    // Important: Supabase Auth (GoTrue) validates the JWT `aud` claim.
+    // If `aud` doesn't match (usually "authenticated"), you'll get:
+    // "Token audience doesn't match request audience".
+    const token = jwt.sign(
+      {
+        sub: userId,
+        role: "authenticated",
+      },
+      jwtSecret,
+      {
+        expiresIn: "1h",
+        audience: "authenticated",
+        issuer: "supabase",
+      }
+    );
+    return token;
+  }
+
   private async saveToDatabase(
     userId: string,
     planName: string,
-    generatedContent: any[]
-  ): Promise<ContentPlan> {
-    const supabase = await createServerSupabaseClient();
+    generatedContent: any[],
+    allowedPlatforms: string[]
+  ): Promise<{ message: string, planId: string }> {
+    // Filter content to only include specified platforms (safety check)
+    const filteredContent = generatedContent.filter((content) =>
+      allowedPlatforms.includes(content.platform?.toLowerCase())
+    );
 
-    await supabase.from('content_plans')
-    .update({
-      is_active: false,
-      archived_at: new Date().toISOString(),
-    })
-    .eq('user_id', userId)
-    .eq('is_active', true);
-
-    const { data: plan, error: planError } = await supabase
-      .from('content_plans')
-      .insert({
-        user_id: userId,
-        title: planName,
-        is_active: true,
-        start_date: generatedContent[0]?.scheduledDate || new Date(),
-        end_date: generatedContent[generatedContent.length - 1]?.scheduledDate || new Date(),
-      })
-      .select()
-      .single();
-
-    if (planError || !plan) {
-      throw new Error(`Failed to create content plan: ${planError?.message}`);
+    if (filteredContent.length === 0) {
+      throw new Error('No content generated for the specified platforms');
     }
 
-    console.log('generatedContent', generatedContent);
+    const plan = {
+      user_id: userId,
+      title: planName,
+      is_active: true,
+      start_date: filteredContent[0]?.scheduledDate || new Date(),
+      end_date: filteredContent[filteredContent.length - 1]?.scheduledDate || new Date(),
+      platforms: allowedPlatforms as Platform[],
+      description: null,
+      archived_at: null,
+    }
 
-    const items = generatedContent.map((content) => ({
-      plan_id: plan.id,
+
+    console.log('generatedContent', filteredContent);
+
+    const items = filteredContent.map((content) => ({
       user_id: userId,
       title: content.idea.title,
       content: {
@@ -217,21 +242,89 @@ export class ContentPlanOrchestrator {
       description: content.idea.description,
       status: 'idea' as ItemStatus,
       scheduled_date: content.scheduledDate.toISOString().split('T')[0],
+      position: content?.position || 0,
     }));
 
-    const { data: contentItems, error: itemsError } = await supabase
+
+
+    // Generate token for authenticated Supabase client
+    const token = this.getToken(userId);
+
+    // Create authenticated Supabase client
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      throw new Error("Supabase configuration missing");
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    });
+
+    // Verify the user
+    const { 
+      data: { user }, 
+      error: authError 
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      console.error("Error getting user from Supabase:", authError);
+      throw new Error(`Unauthorized: ${authError?.message || 'User not found'}`);
+    }
+
+    // Archive existing active content plans for this user
+    await supabase
+      .from('content_plans')
+      .update({
+        is_active: false,
+        archived_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId)
+      .eq('is_active', true);
+
+    // Insert the new content plan
+    const { data: contentPlanData, error: contentPlanError } = await supabase
+      .from('content_plans')
+      .insert({
+        ...plan,
+        user_id: userId,
+      })
+      .select()
+      .single();
+
+    if (contentPlanError || !contentPlanData) {
+      throw new Error(`Failed to create content plan: ${contentPlanError?.message || 'Unknown error'}`);
+    }
+
+    // Insert all content items
+    const { data: contentItemsData, error: contentItemsError } = await supabase
       .from('content_items')
-      .insert(items)
+      .insert(
+        items.map((item) => ({
+          ...item,
+          plan_id: contentPlanData.id,
+          user_id: userId,
+        }))
+      )
       .select();
 
-    if (itemsError) {
-      console.error('Error creating content items:', itemsError);
-      throw new Error(`Failed to create content items: ${itemsError.message}`);
+    if (contentItemsError || !contentItemsData) {
+      throw new Error(`Failed to create content items: ${contentItemsError?.message || 'Unknown error'}`);
     }
 
     return {
-      ...plan,
-      items: contentItems as ContentItem[],
+      message: 'Content plan and items created successfully',
+      planId: contentPlanData.id,
     };
   }
 }

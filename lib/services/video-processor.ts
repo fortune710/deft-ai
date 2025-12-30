@@ -111,78 +111,79 @@ export async function downloadVideo(
 
 export async function extractAudioFromVideo(videoId: string, videoStoragePath: string): Promise<AudioExtractionResult> {
   try {
-    const ffmpeg = await import('fluent-ffmpeg').then(m => m.default);
-    const ffmpegPath = await import('@ffmpeg-installer/ffmpeg').then(m => m.default);
+    // const ffmpeg = await import('fluent-ffmpeg').then(m => m.default);
+    // const ffmpegPath = await import('@ffmpeg-installer/ffmpeg').then(m => m.default);
 
-    ffmpeg.setFfmpegPath(ffmpegPath.path);
+    // ffmpeg.setFfmpegPath(ffmpegPath.path);
 
-    const { data: videoData, error: downloadError } = await supabase.storage
-      .from('temp-videos')
-      .download(videoStoragePath);
+    // const { data: videoData, error: downloadError } = await supabase.storage
+    //   .from('temp-videos')
+    //   .download(videoStoragePath);
 
-    if (downloadError || !videoData) {
-      return { success: false, error: `Failed to download video: ${downloadError?.message}` };
-    }
+    // if (downloadError || !videoData) {
+    //   return { success: false, error: `Failed to download video: ${downloadError?.message}` };
+    // }
 
-    const videoTempPath = generateTempFilePath(videoId, 'mp4');
-    const audioTempPath = generateTempFilePath(videoId, 'mp3');
+    // const videoTempPath = generateTempFilePath(videoId, 'mp4');
+    // const audioTempPath = generateTempFilePath(videoId, 'mp3');
 
-    const videoBuffer = await videoData.arrayBuffer();
-    fs.writeFileSync(videoTempPath, Buffer.from(videoBuffer));
+    // const videoBuffer = await videoData.arrayBuffer();
+    // fs.writeFileSync(videoTempPath, Buffer.from(videoBuffer));
 
-    return new Promise((resolve) => {
-      let duration: number | undefined;
+    // return new Promise((resolve) => {
+    //   let duration: number | undefined;
 
-      ffmpeg(videoTempPath)
-        .toFormat('mp3')
-        .audioCodec('libmp3lame')
-        .audioBitrate('128k')
-        .on('codecData', (data) => {
-          const durationMatch = data.duration.match(/(\d{2}):(\d{2}):(\d{2})/);
-          if (durationMatch) {
-            const hours = parseInt(durationMatch[1], 10);
-            const minutes = parseInt(durationMatch[2], 10);
-            const seconds = parseInt(durationMatch[3], 10);
-            duration = hours * 3600 + minutes * 60 + seconds;
-          }
-        })
-        .on('end', async () => {
-          try {
-            const audioBuffer = fs.readFileSync(audioTempPath);
-            const storagePath = `audio/${videoId}.mp3`;
+    //   ffmpeg(videoTempPath)
+    //     .toFormat('mp3')
+    //     .audioCodec('libmp3lame')
+    //     .audioBitrate('128k')
+    //     .on('codecData', (data) => {
+    //       const durationMatch = data.duration.match(/(\d{2}):(\d{2}):(\d{2})/);
+    //       if (durationMatch) {
+    //         const hours = parseInt(durationMatch[1], 10);
+    //         const minutes = parseInt(durationMatch[2], 10);
+    //         const seconds = parseInt(durationMatch[3], 10);
+    //         duration = hours * 3600 + minutes * 60 + seconds;
+    //       }
+    //     })
+    //     .on('end', async () => {
+    //       try {
+    //         const audioBuffer = fs.readFileSync(audioTempPath);
+    //         const storagePath = `audio/${videoId}.mp3`;
 
-            const { error: uploadError } = await supabase.storage
-              .from('temp-videos')
-              .upload(storagePath, audioBuffer, {
-                contentType: 'audio/mpeg',
-                upsert: true,
-              });
+    //         const { error: uploadError } = await supabase.storage
+    //           .from('temp-videos')
+    //           .upload(storagePath, audioBuffer, {
+    //             contentType: 'audio/mpeg',
+    //             upsert: true,
+    //           });
 
-            fs.unlinkSync(videoTempPath);
-            fs.unlinkSync(audioTempPath);
+    //         fs.unlinkSync(videoTempPath);
+    //         fs.unlinkSync(audioTempPath);
 
-            if (uploadError) {
-              resolve({ success: false, error: `Upload failed: ${uploadError.message}` });
-              return;
-            }
+    //         if (uploadError) {
+    //           resolve({ success: false, error: `Upload failed: ${uploadError.message}` });
+    //           return;
+    //         }
 
-            resolve({
-              success: true,
-              audio_path: audioTempPath,
-              storage_path: storagePath,
-              duration_seconds: duration,
-            });
-          } catch (err) {
-            resolve({ success: false, error: err instanceof Error ? err.message : 'Unknown error during upload' });
-          }
-        })
-        .on('error', (err) => {
-          if (fs.existsSync(videoTempPath)) fs.unlinkSync(videoTempPath);
-          if (fs.existsSync(audioTempPath)) fs.unlinkSync(audioTempPath);
-          resolve({ success: false, error: `Audio extraction failed: ${err.message}` });
-        })
-        .save(audioTempPath);
-    });
+    //         resolve({
+    //           success: true,
+    //           audio_path: audioTempPath,
+    //           storage_path: storagePath,
+    //           duration_seconds: duration,
+    //         });
+    //       } catch (err) {
+    //         resolve({ success: false, error: err instanceof Error ? err.message : 'Unknown error during upload' });
+    //       }
+    //     })
+    //     .on('error', (err) => {
+    //       if (fs.existsSync(videoTempPath)) fs.unlinkSync(videoTempPath);
+    //       if (fs.existsSync(audioTempPath)) fs.unlinkSync(audioTempPath);
+    //       resolve({ success: false, error: `Audio extraction failed: ${err.message}` });
+    //     })
+    //     .save(audioTempPath);
+    //});
+    return { success: false, error: 'Audio extraction not yet implemented' };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
   }

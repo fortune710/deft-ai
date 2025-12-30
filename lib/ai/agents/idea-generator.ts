@@ -5,7 +5,7 @@ import { buildIdeaGenerationPrompt } from '../prompts/idea-generation-advanced';
 
 export class IdeaGeneratorAgent implements Agent {
   name = 'Idea Generator';
-  description = 'Generates 200+ scroll-stopping content ideas using contrarian, results-focused, pain point, and transformation strategies';
+  description = 'Generates 100+ scroll-stopping content ideas using contrarian, results-focused, pain point, and transformation strategies';
   modelConfig: AIModelConfig = AI_MODELS.GOOGLE_FLASH;
 
   private getModelForPlatform(platform: string): AIModelConfig {
@@ -27,14 +27,14 @@ export class IdeaGeneratorAgent implements Agent {
     ];
 
     const allIdeas: ContentIdea[] = [];
-    const ideasPerStrategy = 50;
+    const ideasPerStrategy = 25;
     let totalProgress = 0;
 
     onProgress?.({
       phase: 'idea_generation',
       progress: 0,
       message: 'Starting idea generation',
-      details: 'Preparing to generate 200+ content ideas',
+      details: 'Preparing to generate 100 content ideas',
     });
 
     for (let strategyIndex = 0; strategyIndex < strategies.length; strategyIndex++) {

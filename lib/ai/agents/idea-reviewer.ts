@@ -234,7 +234,11 @@ Score all ${batch.length} ideas. Return ONLY the JSON array, no markdown or expl
     contentPillars: string[]
   ): ScoredContentIdea[] {
     const minScoreThreshold = 25;
-    const qualifiedIdeas = scoredIdeas.filter(idea => idea.totalScore >= minScoreThreshold);
+    // Filter to only include ideas for the specified platforms (safety check)
+    const platformFilteredIdeas = scoredIdeas.filter(idea =>
+      platforms.some(p => p.toLowerCase() === idea.platform?.toLowerCase())
+    );
+    const qualifiedIdeas = platformFilteredIdeas.filter(idea => idea.totalScore >= minScoreThreshold);
 
     if (qualifiedIdeas.length <= 30) {
       return qualifiedIdeas;

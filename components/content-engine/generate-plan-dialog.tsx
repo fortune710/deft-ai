@@ -27,9 +27,12 @@ import { useCreatePlan } from '@/hooks/use-content-plans';
 import { useBatchCreateContentItems } from '@/hooks/use-content-items';
 import { useGenerateContentPlan } from '@/hooks/use-generate-content-plan';
 import { useContentProfile } from '@/hooks/use-content-profile';
+import { useContentEngineProgress } from '@/hooks/use-content-engine-progress';
+import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { Platform } from '@/types/content-engine';
 import { z } from 'zod';
+import { useEffect } from 'react';
 
 interface GeneratePlanDialogProps {
   open: boolean;
@@ -50,22 +53,41 @@ type FormData = z.infer<typeof createContentPlanSchema>;
 
 export function GeneratePlanDialog({ open, onOpenChange, onSuccess }: GeneratePlanDialogProps) {
   const [isGenerating, setIsGenerating] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [progressMessage, setProgressMessage] = useState('');
   const [calendarOpen, setCalendarOpen] = useState(false);
 
   const { profile } = useContentProfile();
+  const { progress, isGenerating: isGeneratingFromProgress } = useContentEngineProgress();
+  const queryClient = useQueryClient();
+
+  // Handle completion when progress is deleted
+  useEffect(() => {
+    if (isGenerating && !isGeneratingFromProgress && progress === null) {
+      // Generation completed, refresh plans and close dialog
+      queryClient.invalidateQueries({ queryKey: ['content-plans'] });
+      queryClient.invalidateQueries({ queryKey: ['content-plans', 'active'] });
+      queryClient.invalidateQueries({ queryKey: ['content-items'] });
+      setIsGenerating(false);
+      // Small delay to show success message
+      setTimeout(() => {
+        toast.success('Content plan created successfully!');
+        onOpenChange(false);
+      }, 500);
+    }
+  }, [isGenerating, isGeneratingFromProgress, progress, queryClient, onOpenChange]);
+
+  const currentProgress = progress?.progress || 0;
+  const progressMessage = progress?.message || 'Generating your plan…';
 
   const friendlyStatus = useMemo(() => {
-    if (!isGenerating) return '';
+    if (!isGenerating && !isGeneratingFromProgress) return '';
 
     // Keep these intentionally vague and user-friendly (no agents, no workflow disclosure).
-    if (progress < 20) return 'Getting things ready…';
-    if (progress < 45) return 'Generating ideas tailored to you…';
-    if (progress < 70) return 'Shaping your 30-day plan…';
-    if (progress < 90) return 'Polishing details and spacing posts…';
+    if (currentProgress < 20) return 'Getting things ready…';
+    if (currentProgress < 45) return 'Generating ideas tailored to you…';
+    if (currentProgress < 70) return 'Shaping your 30-day plan…';
+    if (currentProgress < 90) return 'Polishing details and spacing posts…';
     return 'Saving your plan…';
-  }, [isGenerating, progress]);
+  }, [isGenerating, isGeneratingFromProgress, currentProgress]);
 
   const {
     register,
@@ -115,8 +137,6 @@ export function GeneratePlanDialog({ open, onOpenChange, onSuccess }: GeneratePl
     }
 
     setIsGenerating(true);
-    setProgress(0);
-    setProgressMessage('Generating your 30-day plan…');
 
     try {
       const response = await fetch('/api/content/generate-plan', {
@@ -129,55 +149,16 @@ export function GeneratePlanDialog({ open, onOpenChange, onSuccess }: GeneratePl
       });
 
       if (!response.ok) {
-        throw new Error('Failed to start content generation');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to start content generation');
       }
 
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-
-      if (!reader) {
-        throw new Error('No response stream available');
-      }
-
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = JSON.parse(line.slice(6));
-
-            if (data.error) {
-              throw new Error(data.message);
-            }
-
-            setProgress(data.progress);
-            setProgressMessage(data.message);
-            // Intentionally do not surface internal workflow/agent details in the UI.
-
-            if (data.phase === 'complete' && data.contentPlan) {
-              toast.success('Content plan created successfully!');
-              onOpenChange(false);
-              onSuccess(data.contentPlan.id);
-              return;
-            }
-          }
-        }
-      }
+      // The progress will be updated via realtime subscription
+      // We'll monitor the progress state and handle completion
     } catch (error: any) {
       console.error('Error generating plan:', error);
       toast.error(error?.message || 'Failed to generate content plan');
-    } finally {
       setIsGenerating(false);
-      setProgress(0);
-      setProgressMessage('');
     }
   };
 
@@ -194,22 +175,22 @@ export function GeneratePlanDialog({ open, onOpenChange, onSuccess }: GeneratePl
           </DialogDescription>
         </DialogHeader>
 
-        {isGenerating ? (
+        {(isGenerating || isGeneratingFromProgress) ? (
           <div className="space-y-4 py-8">
             <div className="flex items-center justify-center">
               <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
             </div>
             <div className="text-center space-y-3">
-              <p className="font-semibold text-lg">{progressMessage || 'Generating your plan…'}</p>
+              <p className="font-semibold text-lg">{progressMessage}</p>
               <p className="text-sm text-muted-foreground">{friendlyStatus}</p>
               <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
                 <div
                   className="bg-blue-600 h-3 rounded-full transition-all duration-500"
-                  style={{ width: `${progress}%` }}
+                  style={{ width: `${currentProgress}%` }}
                 />
               </div>
               <div className="flex items-center justify-center text-xs text-gray-500">
-                <span>{Math.round(progress)}%</span>
+                <span>{Math.round(currentProgress)}%</span>
               </div>
               <p className="text-xs text-muted-foreground pt-2">
                 This can take a minute. You can keep this window open while we finish.

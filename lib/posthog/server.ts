@@ -21,7 +21,7 @@ function getPostHogServer(): PostHog | null {
 }
 
 /**
- * Track an event server-side by making a direct API call to PostHog
+ * Track an event server-side by using the PostHog Node client
  */
 export async function trackServerEvent(
   eventName: string,
