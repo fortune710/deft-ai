@@ -66,7 +66,7 @@ export class ContentPlanOrchestrator {
       phase: 'idea_generation',
       progress: 10,
       message: 'Starting Agent 1: Idea Generator',
-      details: 'Generating 200+ scroll-stopping content ideas',
+      details: 'Generating 100 scroll-stopping content ideas',
       agent: 'Idea Generator',
     });
 
