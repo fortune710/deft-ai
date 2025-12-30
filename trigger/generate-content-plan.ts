@@ -113,7 +113,6 @@ export const generateContentPlanTask = task({
       });
 
       // Update final progress
-      await wait.for({ seconds: 3 });
       await deleteProgress(supabase, userId);
 
       logger.log("Content plan generation completed", {
@@ -166,27 +165,27 @@ export const generateContentPlanTask = task({
       });
     }
   },
-  onFailure: async (error: any, ...args: any[]) => {
-    // Extract payload from args - Trigger.dev v3 passes it differently
-    const payload = args[0] as GenerateContentPlanPayload | undefined;
-    const ctx = args[1] as any;
+  onFailure: async ({ payload, error, ctx }) => {
     
     // Access userId from payload or context to clean up progress on failure
-    const userId = payload?.userId || ctx?.userId;
+    const userId = payload?.userId;
     
     if (!userId) {
-      logger.error("Task failed but no userId available for cleanup", { error: error?.message });
+      logger.error("Task failed but no userId available for cleanup", { 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        userId
+      });
       return;
     }
     
     logger.error("Task failed - cleaning up progress", { 
-      error: error?.message, 
+      error: error instanceof Error ? error.message : 'Unknown error', 
       userId 
     });
 
     try {
       // Use stored supabase client from context, or create a new one
-      const supabase = ctx?.supabase || createSupabaseClient(userId);
+      const supabase = (ctx as any)?.supabase || createSupabaseClient(userId);
       await deleteProgress(supabase, userId);
       logger.log("Progress cleaned up successfully", { userId });
     } catch (cleanupError) {
