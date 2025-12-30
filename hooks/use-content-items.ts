@@ -137,6 +137,38 @@ export function useUpdateItemPosition() {
       position: number;
       status?: ItemStatus;
     }) => updateItemPosition(itemId, position, status),
+    onMutate: async ({ itemId, position, status }) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['content-items'] });
+
+      // Snapshot the previous value
+      const previousItems = queryClient.getQueriesData({ queryKey: ['content-items'] });
+
+      // Optimistically update all content-items queries
+      queryClient.setQueriesData<ContentItem[]>({ queryKey: ['content-items'] }, (old) => {
+        if (!old) return old;
+        return old.map((item) => {
+          if (item.id === itemId) {
+            const updated = { ...item, position };
+            if (status) {
+              updated.status = status;
+            }
+            return updated;
+          }
+          return item;
+        });
+      });
+
+      return { previousItems };
+    },
+    onError: (err, variables, context) => {
+      // Rollback on error
+      if (context?.previousItems) {
+        context.previousItems.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data);
+        });
+      }
+    },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['content-items', data.plan_id] });
     },

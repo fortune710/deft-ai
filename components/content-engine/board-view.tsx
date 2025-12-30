@@ -51,19 +51,28 @@ export function BoardView({ items, planId }: BoardViewProps) {
 
     const newStatus = destination.droppableId as ItemStatus;
     const newPosition = destination.index;
+    const statusChanged = source.droppableId !== destination.droppableId;
+    const statusLabel = statusColumns.find((col) => col.id === newStatus)?.label || newStatus;
 
     updatePosition.mutate(
       {
         itemId: draggableId,
         position: newPosition,
-        status: source.droppableId !== destination.droppableId ? newStatus : undefined,
+        status: statusChanged ? newStatus : undefined,
       },
       {
         onSuccess: () => {
-          toast.success('Content moved');
+          // Only show toast on status change, not on position-only changes
+          if (statusChanged) {
+            toast.success(`Moved to ${statusLabel}`, {
+              duration: 2000,
+            });
+          }
         },
         onError: () => {
-          toast.error('Failed to move content');
+          toast.error('Failed to move content', {
+            duration: 3000,
+          });
         },
       }
     );
