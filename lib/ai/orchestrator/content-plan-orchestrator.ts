@@ -1,10 +1,10 @@
 import { AgentContext, AgentProgress } from '@/types/ai-agents';
-import { IdeaGeneratorAgent } from '../agents/idea-generator';
-import { IdeaReviewerAgent } from '../agents/idea-reviewer';
+import { IdeaGeneratorAgent } from '@/lib/ai/agents/idea-generator';
+import { IdeaReviewerAgent } from '@/lib/ai/agents/idea-reviewer';
 import { ContentGeneratorAgent } from '../agents/content-generator';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { ContentPlan, ContentItem, ItemStatus, PublishPlanPayload, Platform } from '@/types/content-engine';
-import { SupabaseClient } from '@supabase/supabase-js';
+import { ItemStatus, Platform } from '@/types/content-engine';
+import { createClient } from '@supabase/supabase-js';
+import jwt from 'jsonwebtoken';
 
 interface OrchestratorConfig {
   userId: string;
@@ -173,6 +173,34 @@ export class ContentPlanOrchestrator {
     }
   }
 
+  private getToken(userId: string): string {
+    if (!userId) {
+      throw new Error("User ID is required");
+    }
+
+    const jwtSecret = process.env.SUPABASE_JWT_SECRET!;
+    if (!jwtSecret) {
+      throw new Error("JWT secret is required");
+    }
+    
+    // Important: Supabase Auth (GoTrue) validates the JWT `aud` claim.
+    // If `aud` doesn't match (usually "authenticated"), you'll get:
+    // "Token audience doesn't match request audience".
+    const token = jwt.sign(
+      {
+        sub: userId,
+        role: "authenticated",
+      },
+      jwtSecret,
+      {
+        expiresIn: "1h",
+        audience: "authenticated",
+        issuer: "supabase",
+      }
+    );
+    return token;
+  }
+
   private async saveToDatabase(
     userId: string,
     planName: string,
@@ -219,24 +247,84 @@ export class ContentPlanOrchestrator {
 
 
 
-    const publishPayload: PublishPlanPayload = {
-      contentPlan: plan,
-      contentItems: items,
-      userId: userId,
-    };
+    // Generate token for authenticated Supabase client
+    const token = this.getToken(userId);
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-    const apiUrl = `${appUrl}/api/content/publish-plan`;
-    
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      body: JSON.stringify(publishPayload),
-    });
-    if (!response.ok) {
-      throw new Error(`Failed to publish plan: ${response.statusText}`);
+    // Create authenticated Supabase client
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      throw new Error("Supabase configuration missing");
     }
-    
-    const data = await response.json();
-    return data;
+
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    });
+
+    // Verify the user
+    const { 
+      data: { user }, 
+      error: authError 
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      console.error("Error getting user from Supabase:", authError);
+      throw new Error(`Unauthorized: ${authError?.message || 'User not found'}`);
+    }
+
+    // Archive existing active content plans for this user
+    await supabase
+      .from('content_plans')
+      .update({
+        is_active: false,
+        archived_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId)
+      .eq('is_active', true);
+
+    // Insert the new content plan
+    const { data: contentPlanData, error: contentPlanError } = await supabase
+      .from('content_plans')
+      .insert({
+        ...plan,
+        user_id: userId,
+      })
+      .select()
+      .single();
+
+    if (contentPlanError || !contentPlanData) {
+      throw new Error(`Failed to create content plan: ${contentPlanError?.message || 'Unknown error'}`);
+    }
+
+    // Insert all content items
+    const { data: contentItemsData, error: contentItemsError } = await supabase
+      .from('content_items')
+      .insert(
+        items.map((item) => ({
+          ...item,
+          plan_id: contentPlanData.id,
+          user_id: userId,
+        }))
+      )
+      .select();
+
+    if (contentItemsError || !contentItemsData) {
+      throw new Error(`Failed to create content items: ${contentItemsError?.message || 'Unknown error'}`);
+    }
+
+    return {
+      message: 'Content plan and items created successfully',
+      planId: contentPlanData.id,
+    };
   }
 }
