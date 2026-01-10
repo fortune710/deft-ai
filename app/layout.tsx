@@ -11,12 +11,12 @@ import { PHProvider, PostHogPageView } from '@/lib/posthog/provider';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Content Engine - AI-Powered Content Creation',
+  title: 'Deft - The AI Operator for Modern Creators',
   description: 'Discover your niche and automate content creation with AI',
   openGraph: {
     images: [
       {
-        url: 'https://bolt.new/static/og_default.png',
+        url: '/deft-banner.png',
       },
     ],
   },
@@ -24,7 +24,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     images: [
       {
-        url: 'https://bolt.new/static/og_default.png',
+        url: '/deft-banner.png',
       },
     ],
   },

@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import {
   Sparkles,
@@ -30,9 +31,13 @@ export default function Home() {
       <nav className="sticky top-0 z-50 border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-2 font-bold text-lg">
-            <div className="bg-primary text-primary-foreground flex size-8 items-center justify-center rounded-md">
-              <Sparkles className="size-5" />
-            </div>
+            <Image
+              src="/deft-logo.png"
+              alt="Deft"
+              width={32}
+              height={32}
+              className="rounded-md"
+            />
             <span>Deft</span>
           </div>
           <div className="flex gap-4">
@@ -221,9 +226,13 @@ export default function Home() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col items-center justify-between gap-8 md:flex-row">
             <div className="flex items-center gap-2 font-bold">
-              <div className="bg-primary text-primary-foreground flex size-6 items-center justify-center rounded-md">
-                <Sparkles className="size-4" />
-              </div>
+              <Image
+                src="/deft-logo.png"
+                alt="Deft"
+                width={24}
+                height={24}
+                className="rounded-md"
+              />
               <span>Content Engine</span>
             </div>
             <div className="flex flex-col gap-4 text-center text-sm text-muted-foreground sm:flex-row">
