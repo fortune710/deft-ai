@@ -1,5 +1,4 @@
-import { GalleryVerticalEnd } from "lucide-react"
-
+import Image from "next/image"
 import { SignupForm } from "@/components/signup-form"
 
 export default function SignupPage() {
@@ -7,10 +6,14 @@ export default function SignupPage() {
     <div className="bg-muted flex h-screen flex-col items-center justify-center gap-6 p-6 md:p-10">
       <div className="flex w-full max-w-sm flex-col gap-6">
         <a href="#" className="flex items-center gap-2 self-center font-medium">
-          <div className="bg-primary text-primary-foreground flex size-6 items-center justify-center rounded-md">
-            <GalleryVerticalEnd className="size-2" />
-          </div>
-          Acme Inc.
+          <Image
+            src="/deft-logo.png"
+            alt="Deft"
+            width={24}
+            height={24}
+            className="rounded-md"
+          />
+          Deft
         </a>
         <SignupForm />
       </div>
