@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -15,15 +16,21 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import type { LucideIcon } from 'lucide-react';
+import { SidebarContent, SidebarFooter, SidebarHeader, Sidebar, SidebarGroup, SidebarGroupLabel, SidebarGroupContent } from '@/components/ui/sidebar';
+import { SidebarMenu } from '@/components/ui/sidebar';
+import { SidebarMenuItem } from '@/components/ui/sidebar';
+import { SidebarMenuButton } from '@/components/ui/sidebar';
+import { NavUser } from './nav-user';
+import { useUser } from '@/hooks/use-user';
 
-interface NavItem {
+export interface NavItem {
   title: string;
   href: string;
   icon: LucideIcon;
   visible?: boolean; // true = always visible, false = only in development, undefined = only in development
 }
 
-const navItems: NavItem[] = [
+export const navItems: NavItem[] = [
   {
     title: 'Content Engine',
     href: '/content-engine',
@@ -43,8 +50,8 @@ const navItems: NavItem[] = [
     visible: false, // Only visible in development
   },
   {
-    title: 'Video Analytics',
-    href: '/video-analytics',
+    title: 'Content Analytics',
+    href: '/content-analytics',
     icon: Video,
     visible: false, // Only visible in development
   },
@@ -58,16 +65,8 @@ const settingsItems = [
   },
 ];
 
-export function AppSidebar() {
-  const pathname = usePathname();
-  const router = useRouter();
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    router.push('/login');
-  };
-
-  const filteredNavItems = navItems.filter((item) => {
+export function getFilteredNavItems(): NavItem[] {
+  return navItems.filter((item) => {
     // Content Engine is always visible
     if (item.visible === true) return true;
     // Other items are only visible in development
@@ -77,94 +76,111 @@ export function AppSidebar() {
     // Default: show in development
     return process.env.NODE_ENV === 'development';
   });
+}
+
+export function AppSidebar() {
+  const pathname = usePathname();
+  const router = useRouter();
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    router.push('/login');
+  };
+
+  const filteredNavItems = getFilteredNavItems();
+  const { data: user } = useUser();
 
   return (
     <>
       {/* Desktop Sidebar */}
-      <div className="hidden md:flex h-screen w-64 flex-col border-r bg-sidebar">
-        <div className="flex h-14 items-center border-b px-6">
-          <h2 className="text-lg font-semibold">Deft</h2>
-        </div>
+      <Sidebar>
+        <SidebarHeader>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton size="lg" asChild>
+                <a href="#">
+                  <div className="bg-white flex aspect-square size-8 items-center justify-center rounded-lg p-1.5">
+                    <Image 
+                      src="/deft-logo.png" 
+                      alt="Deft Logo" 
+                      width={20} 
+                      height={20} 
+                      className="object-contain"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-0.5 leading-none">
+                    <span className="font-medium">Deft</span>
+                    <span className="">v0.1.1</span>
+                  </div>
+                </a>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarHeader>
 
-        <ScrollArea className="flex-1 px-3 py-4">
-          <div className="space-y-1">
+        <SidebarContent>
+          <SidebarGroup>
+            <SidebarGroupLabel>Tools</SidebarGroupLabel>
+            <SidebarGroupContent>
+            <SidebarMenu>
             {filteredNavItems.map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.href;
               return (
-                <Button
-                  key={item.href}
-                  variant={isActive ? 'secondary' : 'ghost'}
-                  className="w-full justify-start"
-                  asChild
-                >
-                  <Link href={item.href}>
-                    <Icon className="mr-2 h-4 w-4" />
-                    {item.title}
-                  </Link>
-                </Button>
-              );
-            })}
-          </div>
+                <SidebarMenuItem key={item.href}>
+                  <SidebarMenuButton asChild isActive={isActive}  >
+                    <Link href={item.href}>
+                      <Icon className="mr-2 h-4 w-4" />
+                      {item.title}
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
 
-          <Separator className="my-4" />
+          <SidebarGroup>
+            <SidebarGroupLabel>Settings</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {settingsItems.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = pathname === item.href;
+                  return (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton asChild isActive={isActive}  >
+                        <Link href={item.href}>
+                          <Icon className="mr-2 h-4 w-4" />
+                          {item.title}
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
 
-          <div className="space-y-1">
-            {settingsItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = pathname === item.href;
-              return (
-                <Button
-                  key={item.href}
-                  variant={isActive ? 'secondary' : 'ghost'}
-                  className="w-full justify-start"
-                  asChild
-                >
-                  <Link href={item.href}>
-                    <Icon className="mr-2 h-4 w-4" />
-                    {item.title}
-                  </Link>
-                </Button>
-              );
-            })}
-          </div>
-        </ScrollArea>
+        </SidebarContent>
 
-        <div className="border-t p-3">
-          <Button
-            variant="ghost"
-            className="w-full justify-start text-muted-foreground"
-            onClick={handleSignOut}
-          >
-            <LogOut className="mr-2 h-4 w-4" />
-            Sign Out
-          </Button>
-        </div>
-      </div>
+        <SidebarFooter>
+          {user ? (
+            <NavUser user={user} />
+          ) : (
+            <Button
+              variant="ghost"
+              className="w-full justify-start text-muted-foreground"
+              onClick={handleSignOut}
+            >
+              <LogOut className="mr-2 h-4 w-4 shrink-0" />
+              Sign Out
+            </Button>
+          )}
+        </SidebarFooter>
+      </Sidebar>
       
-      {/* Mobile Bottom Tab Bar */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t bg-sidebar">
-        <div className="bg-background flex items-center justify-around h-16 px-2">
-          {filteredNavItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = pathname === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex flex-col items-center justify-center gap-1 flex-1 h-full rounded-md transition-colors ${
-                  isActive
-                    ? 'text-primary bg-primary/10'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                }`}
-              >
-                <Icon className="h-5 w-5" />
-                <span className="text-xs font-medium">{item.title}</span>
-              </Link>
-            );
-          })}
-        </div>
-      </div>
     </>
   );
 }
