@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { data: expiredVideos, error: fetchError } = await supabase
-      .from('video_analytics')
+      .from('content_analytics')
       .select('id, video_file_path, audio_file_path')
       .lt('expires_at', new Date().toISOString())
       .not('video_file_path', 'is', null);
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
       await deleteVideoFiles(video.video_file_path, video.audio_file_path);
 
       const { error: updateError } = await supabase
-        .from('video_analytics')
+        .from('content_analytics')
         .update({
           video_file_path: null,
           audio_file_path: null,
