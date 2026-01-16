@@ -2,7 +2,8 @@ import ytdl from 'ytdl-core';
 import fs from 'fs';
 import path from 'path';
 import { createClient } from '@supabase/supabase-js';
-import type { Platform, VideoDownloadResult, AudioExtractionResult } from '@/types/video-analytics';
+import type { Platform, VideoDownloadResult, AudioExtractionResult, ThumbnailExtractionResult } from '@/types/content-analytics';
+import { SUPABASE_STORAGE_BUCKETS } from '@/lib/utils';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -79,17 +80,43 @@ export async function downloadYouTubeVideo(videoUrl: string, videoId: string): P
 }
 
 export async function downloadInstagramVideo(videoUrl: string, videoId: string): Promise<VideoDownloadResult> {
-  return {
-    success: false,
-    error: 'Instagram video download not yet implemented. Please provide video file manually.',
-  };
+  try {
+    const storagePath = `videos/${videoId}.mp4`;
+    const response = await fetch(process.env.YT_WORKER_URL + '/download', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ url: videoUrl, path: storagePath }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      return { success: false, error: data.error };
+    }
+    return { success: true, storage_path: storagePath };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+  }
 }
 
 export async function downloadTikTokVideo(videoUrl: string, videoId: string): Promise<VideoDownloadResult> {
-  return {
-    success: false,
-    error: 'TikTok video download not yet implemented. Please provide video file manually.',
-  };
+  try {
+    const storagePath = `videos/${videoId}.mp4`;
+    const response = await fetch(process.env.YT_WORKER_URL + '/download', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ url: videoUrl, path: storagePath }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      return { success: false, error: data.error };
+    }
+    return { success: true, storage_path: storagePath };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+  }
 }
 
 export async function downloadVideo(
@@ -109,81 +136,63 @@ export async function downloadVideo(
   }
 }
 
-export async function extractAudioFromVideo(videoId: string, videoStoragePath: string): Promise<AudioExtractionResult> {
+export async function extractAudioFromVideo(videoId: string): Promise<AudioExtractionResult> {
   try {
-    // const ffmpeg = await import('fluent-ffmpeg').then(m => m.default);
-    // const ffmpegPath = await import('@ffmpeg-installer/ffmpeg').then(m => m.default);
+    const response = await fetch(process.env.YT_WORKER_URL + '/extract?audio=true', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ video_id: videoId }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      return { success: false, error: data.error };
+    }
+    return { success: true, storage_path: data.audio_path };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+  }
+}
 
-    // ffmpeg.setFfmpegPath(ffmpegPath.path);
+/**
+ * Extract thumbnail from video using the worker service
+ * 
+ * The worker service implements POST /extract?thumbnail=true endpoint:
+ * - Accepts: { videoUrl: string, uploadPath: string }
+ * - Downloads video from videoUrl
+ * - Extracts thumbnail at 1 second mark using: ffmpeg -i video.mp4 -ss 00:00:01 -vframes 1 thumbnail.jpg
+ * - Uploads thumbnail to Supabase storage at uploadPath
+ * - Returns: { success: true, storage_path: string }
+ */
+export async function extractThumbnailFromVideo(
+  videoId: string,
+): Promise<ThumbnailExtractionResult> {
+  try {
+    // Call worker service to extract thumbnail using combined /extract endpoint
+    const response = await fetch(process.env.YT_WORKER_URL + '/extract?thumbnail=true', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ 
+        video_id: videoId
+      }),
+    });
 
-    // const { data: videoData, error: downloadError } = await supabase.storage
-    //   .from('temp-videos')
-    //   .download(videoStoragePath);
+    if (!response.ok) {
+      console.error('Failed to extract thumbnail:', response.statusText);
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      return { success: false, error: errorData.error || 'Failed to extract thumbnail' };
+    }
 
-    // if (downloadError || !videoData) {
-    //   return { success: false, error: `Failed to download video: ${downloadError?.message}` };
-    // }
+    const data = await response.json();
 
-    // const videoTempPath = generateTempFilePath(videoId, 'mp4');
-    // const audioTempPath = generateTempFilePath(videoId, 'mp3');
-
-    // const videoBuffer = await videoData.arrayBuffer();
-    // fs.writeFileSync(videoTempPath, Buffer.from(videoBuffer));
-
-    // return new Promise((resolve) => {
-    //   let duration: number | undefined;
-
-    //   ffmpeg(videoTempPath)
-    //     .toFormat('mp3')
-    //     .audioCodec('libmp3lame')
-    //     .audioBitrate('128k')
-    //     .on('codecData', (data) => {
-    //       const durationMatch = data.duration.match(/(\d{2}):(\d{2}):(\d{2})/);
-    //       if (durationMatch) {
-    //         const hours = parseInt(durationMatch[1], 10);
-    //         const minutes = parseInt(durationMatch[2], 10);
-    //         const seconds = parseInt(durationMatch[3], 10);
-    //         duration = hours * 3600 + minutes * 60 + seconds;
-    //       }
-    //     })
-    //     .on('end', async () => {
-    //       try {
-    //         const audioBuffer = fs.readFileSync(audioTempPath);
-    //         const storagePath = `audio/${videoId}.mp3`;
-
-    //         const { error: uploadError } = await supabase.storage
-    //           .from('temp-videos')
-    //           .upload(storagePath, audioBuffer, {
-    //             contentType: 'audio/mpeg',
-    //             upsert: true,
-    //           });
-
-    //         fs.unlinkSync(videoTempPath);
-    //         fs.unlinkSync(audioTempPath);
-
-    //         if (uploadError) {
-    //           resolve({ success: false, error: `Upload failed: ${uploadError.message}` });
-    //           return;
-    //         }
-
-    //         resolve({
-    //           success: true,
-    //           audio_path: audioTempPath,
-    //           storage_path: storagePath,
-    //           duration_seconds: duration,
-    //         });
-    //       } catch (err) {
-    //         resolve({ success: false, error: err instanceof Error ? err.message : 'Unknown error during upload' });
-    //       }
-    //     })
-    //     .on('error', (err) => {
-    //       if (fs.existsSync(videoTempPath)) fs.unlinkSync(videoTempPath);
-    //       if (fs.existsSync(audioTempPath)) fs.unlinkSync(audioTempPath);
-    //       resolve({ success: false, error: `Audio extraction failed: ${err.message}` });
-    //     })
-    //     .save(audioTempPath);
-    //});
-    return { success: false, error: 'Audio extraction not yet implemented' };
+    return {
+      success: true,
+      thumbnail_url: data.thumbnail_url,
+      storage_path: data.thumbnail_path,
+    };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
   }
@@ -196,7 +205,7 @@ export async function deleteVideoFiles(videoStoragePath: string | null, audioSto
     if (audioStoragePath) filesToDelete.push(audioStoragePath);
 
     if (filesToDelete.length > 0) {
-      await supabase.storage.from('temp-videos').remove(filesToDelete);
+      await supabase.storage.from(SUPABASE_STORAGE_BUCKETS.VIDEOS).remove(filesToDelete);
     }
   } catch (err) {
     console.error('Error deleting video files:', err);
