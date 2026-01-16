@@ -6,7 +6,7 @@ interface VideoContainerProps {
 
 export function VideoContainer({ videoSrc }: VideoContainerProps) {
   return (
-    <div className="rounded-lg border border-primary bg-muted aspect-video w-[560px] h-[630px] relative overflow-hidden">
+    <div className="rounded-lg border border-primary bg-muted aspect-video w-full md:w-[560px] h-[630px] relative overflow-hidden">
       {videoSrc ? (
         <video controls src={videoSrc} className="rounded-lg w-full h-full object-cover inset-0" />
       ) : (

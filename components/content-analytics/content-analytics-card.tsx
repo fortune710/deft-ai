@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { ContentAnalytics } from '@/types/content-analytics';
 import { ContentFeedbackDialog } from './content-feedback-dialog';
-import Image from 'next/image';
+import { VideoThumbnail } from './video-thumbnail';
 import { useRouter } from 'next/navigation';
 
 interface ContentAnalyticsCardProps {
@@ -55,15 +55,10 @@ export function ContentAnalyticsCard({ content }: ContentAnalyticsCardProps) {
 
           {
             content.content_type === 'video' ? (
-            <div className="relative w-full aspect-video rounded-t-lg overflow-hidden bg-muted">
-              <Image
-                src={content.thumbnail_url || ''}
-                alt={content.title || 'Video thumbnail'}
-                fill
-                className="object-cover"
-                unoptimized
+              <VideoThumbnail
+                thumbnailUrl={content.thumbnail_url}
+                title={content.title}
               />
-            </div>
             ) : (
               <div className="text-sm text-muted-foreground p-3 rounded-lg relative w-full aspect-video rounded-t-lg overflow-hidden bg-muted">
                 <p className="whitespace-pre-wrap">

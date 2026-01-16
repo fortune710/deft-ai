@@ -34,8 +34,8 @@ export function MobileTabBar({ navItems }: MobileTabBarProps) {
                   : 'text-muted-foreground hover:text-foreground hover:bg-accent'
               }`}
             >
-              <Icon className="h-5 w-5" />
-              <span className="text-xs font-medium">{item.title}</span>
+              <Icon className="h-5 w-5 shrink-0" />
+              <span className="text-xs font-medium text-center leading-tight">{item.title}</span>
             </Link>
           );
         })}
