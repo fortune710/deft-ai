@@ -138,7 +138,7 @@ export async function downloadVideo(
 
 export async function extractAudioFromVideo(videoId: string): Promise<AudioExtractionResult> {
   try {
-    const response = await fetch(process.env.YT_WORKER_URL + '/extract?audio=true', {
+    const response = await fetch(process.env.YT_WORKER_URL + '/extract?audio=true&thumbnail=true', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

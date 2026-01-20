@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseClientWithToken, supabaseAdmin } from '@/lib/supabase/server';
-import { validateVideoUrl, detectPlatformFromUrl } from '@/lib/validations/video-analytics';
-import { scrapeVideoMetrics, fetchVideoBasicInfo } from '@/lib/services/platform-scrapers';
+import { createServerSupabaseClient, supabaseAdmin } from '@/lib/supabase/server';
+import { validateVideoUrl } from '@/lib/validations/video-analytics';
+import { fetchVideoBasicInfo } from '@/lib/services/platform-scrapers';
 import { logger } from '@/lib/logger';
 import { processContentAnalyticsTask } from '@/trigger/process-content-analytics';
 import type { Platform, ContentType } from '@/types/content-analytics';
@@ -59,8 +59,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Step 3: Create supabase client using userId, then read user from it
-    requestLogger.debug('Initializing Supabase client with token', { userId });
-    const supabase = await createSupabaseClientWithToken(userId);
+    requestLogger.debug('Initializing Supabase client', { userId });
+    const supabase = await createServerSupabaseClient();
 
     const {
       data: { user },

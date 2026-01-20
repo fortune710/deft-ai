@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { ContentPlanOrchestrator } from '@/lib/ai/orchestrator/content-plan-orchestrator';
 import { ContentEngineServerTracking } from '@/lib/posthog/server';
 import { generateContentPlanTask } from '@/trigger/generate-content-plan';
 
@@ -10,8 +9,7 @@ export const maxDuration = 300;
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
   let userId: string | undefined;
-  let planName: string | undefined;
-  let platforms: string[] | undefined;
+
 
   try {
     const supabase = await createServerSupabaseClient();
@@ -21,6 +19,7 @@ export async function POST(request: NextRequest) {
       error: authError,
     } = await supabase.auth.getUser();
 
+    
     if (authError || !user) {
       await ContentEngineServerTracking.planGenerationFailed({
         error: 'Unauthorized',
@@ -29,12 +28,12 @@ export async function POST(request: NextRequest) {
       });
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
+    
     userId = user.id;
 
     const body = await request.json();
-    planName = body.planName;
-    platforms = body.platforms;
+    const planName: string | undefined = body.planName;
+    const platforms: string[] | undefined = body.platforms;
 
     if (!planName || !platforms || platforms.length === 0) {
       await ContentEngineServerTracking.planGenerationFailed({
