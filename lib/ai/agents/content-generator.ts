@@ -150,7 +150,7 @@ export class ContentGeneratorAgent implements Agent {
     }
 
     const metadata = extractMetadataFromContent(idea.platform, platformContent);
-    const scriptContent = platformContent.script_content || platformContent.caption || '';
+    const scriptContent = platformContent.script_content || '';
 
     return {
       scriptContent,
