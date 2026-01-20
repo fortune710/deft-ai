@@ -53,7 +53,7 @@ export const navItems: NavItem[] = [
     title: 'Content Analytics',
     href: '/content-analytics',
     icon: Video,
-    visible: false, // Only visible in development
+    visible: true, // Only visible in development
   },
 ];
 
