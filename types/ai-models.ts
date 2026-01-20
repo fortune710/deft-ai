@@ -3,6 +3,7 @@ export type AIModelProvider = 'google' | 'grok';
 export type AIModelName =
   | 'gemini-2.5-flash'
   | 'gemini-2.5-pro'
+  | 'gemini-3-flash-preview'
   | 'grok-4-fast-reasoning'
   | 'grok-4-fast-non-reasoning';
 
