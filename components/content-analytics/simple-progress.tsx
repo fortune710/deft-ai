@@ -1,17 +1,18 @@
 import { cn } from '@/lib/utils';
+import { Progress } from '../ui/progress';
 
 interface SimpleProgressProps {
   value: number;
   className?: string;
+  color?: string;
 }
 
-export function SimpleProgress({ value, className }: SimpleProgressProps) {
+export function SimpleProgress({ value, className, color }: SimpleProgressProps) {
   return (
-    <div className={cn('relative h-4 w-full overflow-hidden rounded-full bg-secondary', className)}>
-      <div
-        className="h-full bg-primary transition-all duration-300"
-        style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
-      />
-    </div>
+    <Progress 
+      value={value} 
+      className={cn('h-full w-full', className)}
+      color={color}
+    />
   );
 }

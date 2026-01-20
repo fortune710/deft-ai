@@ -5,12 +5,11 @@ import { useMemo } from 'react';
 import type { ContentAnalytics } from '@/types/content-analytics';
 import { useContentAnalyticsItem } from '@/hooks/use-content-analytics-item';
 import { supabase } from '@/lib/supabase/client';
-import { SUPABASE_STORAGE_BUCKETS } from '@/lib/utils';
+import { PLATFORM_COLORS, SUPABASE_STORAGE_BUCKETS } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { SimpleProgress } from '@/components/content-analytics/simple-progress';
 import { useParams } from 'next/navigation';
 import { AppLayout } from '@/components/app-layout';
 import { VideoContainer } from '@/components/content-analytics/video-container';
@@ -32,6 +31,8 @@ export default function ContentAnalyticsItemPage() {
   const params = useParams();
   const id = params.id as string;
   const { data: item, isLoading, error } = useContentAnalyticsItem(id);
+
+  const platformColor = PLATFORM_COLORS[item?.platform!] || PLATFORM_COLORS.youtube;
 
   const videoSrc = useMemo(() => {
     if (!item) return null;
@@ -97,9 +98,8 @@ export default function ContentAnalyticsItemPage() {
           <div className='flex items-center justify-between'>
             <h1 className="text-2xl max-md:text-lg font-bold mr-2">{item.title || 'Untitled Content'}</h1>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge>{item.platform}</Badge>
-              <Badge variant="outline">{item.content_type}</Badge>
-              <Badge variant="secondary">{item.processing_status}</Badge>
+              <Badge className={`${platformColor} text-white`}>{item.platform}</Badge>
+              <Badge className='max-md:hidden' variant="secondary">{item.processing_status}</Badge>
             </div>
           </div>
 

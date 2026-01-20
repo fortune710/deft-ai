@@ -94,14 +94,14 @@ export default function ContentAnalyticsPage() {
           <div>
             <h1 className="text-3xl max-md:text-lg font-bold">Content Analytics</h1>
             <p className="text-muted-foreground max-md:text-sm mt-2">
-              Analyze your content performance with AI-powered insights
+              Analyze your content quality with AI-powered insights
             </p>
           </div>
           {/* Desktop Button - Hidden on mobile */}
           <Button 
             onClick={() => setUploadDialogOpen(true)} 
             size="lg"
-            className="hidden md:flex"
+            className="hidden md:flex rounded-lg"
           >
             <Plus className="mr-2 h-5 w-5" />
             Analyze Content
