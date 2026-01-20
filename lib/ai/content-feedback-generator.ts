@@ -50,11 +50,49 @@ function extractTextHook(text: string): string {
   return firstParagraph.substring(0, 200).trim();
 }
 
+function extractVideoCTA(transcript: string, segments?: any[]): string {
+  if (segments && segments.length > 0) {
+    // Get last 10-20 seconds of transcript
+    const totalDuration = segments[segments.length - 1]?.end_time || 0;
+    const ctaStartTime = Math.max(0, totalDuration - 20);
+    const ctaSegments = segments.filter(seg => seg.start_time >= ctaStartTime);
+    return ctaSegments.map(seg => seg.text).join(' ').trim();
+  }
+  
+  // Fallback: extract last 50 words or last paragraph
+  const sentences = transcript.split(/[.!?]+/).filter(s => s.trim().length > 0);
+  if (sentences.length > 0) {
+    const lastFewSentences = sentences.slice(-2).join('. ').trim();
+    return lastFewSentences.substring(0, 200);
+  }
+  
+  const words = transcript.split(' ');
+  return words.slice(-50).join(' ').trim();
+}
+
+function extractTextCTA(text: string): string {
+  // Extract last paragraph or last 200 characters
+  const paragraphs = text.split('\n\n').filter(p => p.trim().length > 0);
+  if (paragraphs.length > 0) {
+    const lastParagraph = paragraphs[paragraphs.length - 1];
+    return lastParagraph.substring(Math.max(0, lastParagraph.length - 200)).trim();
+  }
+  
+  const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
+  if (sentences.length > 0) {
+    const lastFewSentences = sentences.slice(-2).join('. ').trim();
+    return lastFewSentences.substring(0, 200);
+  }
+  
+  return text.substring(Math.max(0, text.length - 200)).trim();
+}
+
 function buildVideoFeedbackPrompt(
   currentContent: ContentAnalytics,
   historicalContent: HistoricalContent[]
 ): string {
   const hookTranscript = extractHookTranscript(currentContent.transcript || '');
+  const ctaTranscript = extractVideoCTA(currentContent.transcript || '');
 
   let prompt = `You are an expert video content analyst specializing in ${currentContent.platform} content. Analyze this video and provide detailed, actionable feedback.
 
@@ -71,6 +109,9 @@ function buildVideoFeedbackPrompt(
 
 **Hook (First 3-5 seconds):**
 "${hookTranscript}"
+
+**CTA (Last 10-20 seconds):**
+"${ctaTranscript}"
 
 **Full Transcript:**
 ${currentContent.transcript || ''}
@@ -112,6 +153,13 @@ ${currentContent.transcript || ''}
     "improvements": ["<improvement 1>", "<improvement 2>"],
     "transcript_excerpt": "${hookTranscript}"
   },
+  "cta_analysis": {
+    "score": <number 1-10>,
+    "strengths": ["<strength 1>", "<strength 2>"],
+    "improvements": ["<improvement 1>", "<improvement 2>"],
+    "cta_text": "${ctaTranscript}",
+    "effectiveness_notes": "<detailed analysis of CTA effectiveness, clarity, and actionability>"
+  },
   "content_quality": {
     "score": <number 1-10>,
     "highlights": ["<highlight 1>", "<highlight 2>"],
@@ -146,12 +194,14 @@ ${currentContent.transcript || ''}
 \`\`\`
 
 **Analysis Guidelines:**
-1. Hook Analysis: Evaluate the first 3-5 seconds - does it grab attention? Is there a clear value proposition?
-2. Content Quality: Assess structure, pacing, clarity, entertainment value, and educational content
-3. Retention Tips: Identify where viewers might drop off and provide specific fixes
-4. Platform-Specific: Consider ${currentContent.platform} best practices and algorithm preferences
-5. Comparison: ${historicalContent.length > 0 ? 'Compare with user\'s previous content and identify patterns' : 'Provide general benchmarks'}
-6. Actionable: Every suggestion must be specific and implementable
+1. Overall Score (Content Rating): Rate the overall content quality from 1-10, considering all aspects including hook, CTA, content quality, and engagement potential
+2. Hook Analysis: Evaluate the first 3-5 seconds - does it grab attention? Is there a clear value proposition?
+3. CTA Analysis: Evaluate the call-to-action in the last 10-20 seconds - is it clear, compelling, and actionable? Does it align with the content goal? Is it specific enough to drive action?
+4. Content Quality: Assess structure, pacing, clarity, entertainment value, and educational content
+5. Retention Tips: Identify where viewers might drop off and provide specific fixes
+6. Platform-Specific: Consider ${currentContent.platform} best practices and algorithm preferences
+7. Comparison: ${historicalContent.length > 0 ? 'Compare with user\'s previous content and identify patterns' : 'Provide general benchmarks'}
+8. Actionable: Every suggestion must be specific and implementable
 
 Respond ONLY with the JSON object, no additional text.`;
 
@@ -163,6 +213,7 @@ function buildTextFeedbackPrompt(
   historicalContent: HistoricalContent[]
 ): string {
   const textHook = extractTextHook(currentContent.content_text || '');
+  const textCTA = extractTextCTA(currentContent.content_text || '');
 
   let prompt = `You are an expert social media content analyst specializing in ${currentContent.platform} content. Analyze this text post and provide detailed, actionable feedback.
 
@@ -174,6 +225,9 @@ function buildTextFeedbackPrompt(
 
 **Hook (Opening Lines):**
 "${textHook}"
+
+**CTA (Closing Lines):**
+"${textCTA}"
 
 **Full Content:**
 ${currentContent.content_text || ''}
@@ -200,6 +254,13 @@ ${currentContent.content_text || ''}
     "strengths": ["<strength 1>", "<strength 2>"],
     "improvements": ["<improvement 1>", "<improvement 2>"],
     "text_excerpt": "${textHook}"
+  },
+  "cta_analysis": {
+    "score": <number 1-10>,
+    "strengths": ["<strength 1>", "<strength 2>"],
+    "improvements": ["<improvement 1>", "<improvement 2>"],
+    "cta_text": "${textCTA}",
+    "effectiveness_notes": "<detailed analysis of CTA effectiveness, clarity, and actionability>"
   },
   "content_quality": {
     "score": <number 1-10>,
@@ -233,14 +294,16 @@ ${currentContent.content_text || ''}
 \`\`\`
 
 **Analysis Guidelines:**
-1. Hook Analysis: Evaluate the opening lines - does it grab attention? Is there a clear value proposition or hook?
-2. Content Quality: Assess structure, flow, clarity, engagement value, and call-to-action effectiveness
-3. Platform-Specific: Consider ${currentContent.platform} best practices:
+1. Overall Score (Content Rating): Rate the overall content quality from 1-10, considering all aspects including hook, CTA, content quality, and engagement potential
+2. Hook Analysis: Evaluate the opening lines - does it grab attention? Is there a clear value proposition or hook?
+3. CTA Analysis: Evaluate the call-to-action in the closing lines - is it clear, compelling, and actionable? Does it align with the content goal? Is it specific enough to drive engagement (likes, comments, shares, follows)?
+4. Content Quality: Assess structure, flow, clarity, engagement value, and overall message effectiveness
+5. Platform-Specific: Consider ${currentContent.platform} best practices:
    ${currentContent.platform === 'twitter' ? '- Character limit optimization\n   - Thread structure (if applicable)\n   - Hashtag usage\n   - Engagement patterns' : ''}
    ${currentContent.platform === 'linkedin' ? '- Professional tone\n   - Value-driven content\n   - Engagement hooks\n   - Call-to-action clarity' : ''}
-4. Structure: Evaluate paragraph breaks, readability, and flow
-5. Comparison: ${historicalContent.length > 0 ? 'Compare with user\'s previous content and identify patterns' : 'Provide general benchmarks'}
-6. Actionable: Every suggestion must be specific and implementable
+6. Structure: Evaluate paragraph breaks, readability, and flow
+7. Comparison: ${historicalContent.length > 0 ? 'Compare with user\'s previous content and identify patterns' : 'Provide general benchmarks'}
+8. Actionable: Every suggestion must be specific and implementable
 
 Respond ONLY with the JSON object, no additional text.`;
 

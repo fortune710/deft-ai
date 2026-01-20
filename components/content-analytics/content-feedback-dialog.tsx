@@ -44,9 +44,10 @@ export function ContentFeedbackDialog({ content, open, onOpenChange }: ContentFe
 
         <ScrollArea className="h-[70vh] pr-4">
           <Tabs defaultValue="overview" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="hook">Hook</TabsTrigger>
+              <TabsTrigger value="cta">CTA</TabsTrigger>
               <TabsTrigger value="content">Content</TabsTrigger>
               <TabsTrigger value="recommendations">Tips</TabsTrigger>
             </TabsList>
@@ -67,7 +68,7 @@ export function ContentFeedbackDialog({ content, open, onOpenChange }: ContentFe
                     <SimpleProgress value={(feedback.overall_score ?? 0) * 10} className="h-2" />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4 pt-2">
+                  <div className="grid grid-cols-3 gap-4 pt-2">
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-sm text-muted-foreground">Hook Score</span>
@@ -76,6 +77,16 @@ export function ContentFeedbackDialog({ content, open, onOpenChange }: ContentFe
                         </span>
                       </div>
                       <SimpleProgress value={(feedback.hook_analysis?.score ?? 0) * 10} className="h-1.5" />
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm text-muted-foreground">CTA Score</span>
+                        <span className={`font-semibold ${getScoreColor(feedback.cta_analysis?.score ?? 0)}`}>
+                          {feedback.cta_analysis?.score ?? 0}/10
+                        </span>
+                      </div>
+                      <SimpleProgress value={(feedback.cta_analysis?.score ?? 0) * 10} className="h-1.5" />
                     </div>
 
                     <div>
@@ -162,6 +173,65 @@ export function ContentFeedbackDialog({ content, open, onOpenChange }: ContentFe
                           </li>
                         ))}
                       </ul>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="cta" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">CTA Analysis</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {feedback.cta_analysis?.cta_text && (
+                    <div className="bg-muted p-3 rounded-lg">
+                      <p className="text-sm font-medium mb-1">
+                        {content.content_type === 'video' ? 'CTA (Last 10-20 seconds)' : 'CTA (Closing Lines)'}
+                      </p>
+                      <p className="text-sm italic">"{feedback.cta_analysis.cta_text}"</p>
+                    </div>
+                  )}
+
+                  {feedback.cta_analysis?.strengths && feedback.cta_analysis.strengths.length > 0 && (
+                    <div>
+                      <h4 className="font-medium mb-2 flex items-center gap-2 text-green-700">
+                        <CheckCircle2 className="h-4 w-4" />
+                        Strengths
+                      </h4>
+                      <ul className="space-y-1">
+                        {feedback.cta_analysis.strengths.map((strength, idx) => (
+                          <li key={idx} className="text-sm pl-6 relative">
+                            <span className="absolute left-0">•</span>
+                            {strength}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {feedback.cta_analysis?.improvements && feedback.cta_analysis.improvements.length > 0 && (
+                    <div>
+                      <h4 className="font-medium mb-2 flex items-center gap-2 text-amber-700">
+                        <AlertCircle className="h-4 w-4" />
+                        Improvements
+                      </h4>
+                      <ul className="space-y-1">
+                        {feedback.cta_analysis.improvements.map((improvement, idx) => (
+                          <li key={idx} className="text-sm pl-6 relative">
+                            <span className="absolute left-0">•</span>
+                            {improvement}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {feedback.cta_analysis?.effectiveness_notes && (
+                    <div className="border-t pt-4">
+                      <h4 className="font-medium mb-2">Effectiveness Notes</h4>
+                      <p className="text-sm text-muted-foreground">{feedback.cta_analysis.effectiveness_notes}</p>
                     </div>
                   )}
                 </CardContent>

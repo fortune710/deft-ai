@@ -1,6 +1,5 @@
 import ytdl from 'ytdl-core';
-import type { Platform, MetricsScrapingResult, VideoMetrics } from '@/types/video-analytics';
-import { extractVideoId } from '@/lib/validations/video-analytics';
+import type { Platform, MetricsScrapingResult, VideoMetrics } from '@/types/content-analytics';
 import { calculateEngagementRate } from '@/lib/validations/video-analytics';
 
 export async function scrapeYouTubeMetrics(videoUrl: string): Promise<MetricsScrapingResult> {
