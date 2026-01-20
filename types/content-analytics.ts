@@ -46,6 +46,14 @@ export interface HookAnalysis {
   text_excerpt?: string;
 }
 
+export interface CTAAnalysis {
+  score: number;
+  strengths: string[];
+  improvements: string[];
+  cta_text?: string;
+  effectiveness_notes?: string;
+}
+
 export interface ContentQuality {
   score: number;
   highlights: string[];
@@ -76,6 +84,7 @@ export interface ComparisonInsights {
 export interface AIFeedback {
   overall_score: number;
   hook_analysis: HookAnalysis;
+  cta_analysis: CTAAnalysis;
   content_quality: ContentQuality;
   retention_tips: RetentionTips;
   comparison_insights?: ComparisonInsights;
