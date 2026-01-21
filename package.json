@@ -7,6 +7,7 @@
     "@hookform/resolvers": "^3.9.0",
     "@netlify/plugin-nextjs": "^5.15.1",
     "@next/swc-wasm-nodejs": "13.5.8",
+    "@posthog/nextjs-config": "1.4.0",
     "@radix-ui/react-accordion": "^1.2.0",
     "@radix-ui/react-alert-dialog": "^1.1.1",
     "@radix-ui/react-aspect-ratio": "^1.1.0",
@@ -80,6 +81,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@posthog/cli": "^0.5.25",
     "@trigger.dev/build": "4.3.2"
   },
   "name": "deft",
