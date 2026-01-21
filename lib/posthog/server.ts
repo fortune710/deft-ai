@@ -3,7 +3,7 @@ import { PostHog } from 'posthog-node';
 /**
  * Initialize PostHog server instance for server-side tracking
  */
-function getPostHogServer(): PostHog | null {
+export function getPostHogServer(): PostHog | null {
   const posthogKey = process.env.NEXT_PUBLIC_POSTHOG_KEY;
   const posthogHost = process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com';
 
@@ -62,6 +62,11 @@ export async function trackAPIRequest(
     method,
     ...properties,
   }, properties?.userId);
+}
+
+export function trackServerError(error: Error, properties?: Record<string, any>, userId?: string) {
+  const client  = getPostHogServer();
+  client?.captureException(error, userId, properties);
 }
 
 /**

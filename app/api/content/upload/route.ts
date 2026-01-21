@@ -8,9 +8,18 @@ import type { Platform, ContentType } from '@/types/content-analytics';
 import { format } from 'date-fns';
 import crypto from 'crypto';
 import { SUPABASE_STORAGE_BUCKETS } from '@/lib/utils';
+import { trackServerError } from '@/lib/posthog/server';
+
 
 export async function POST(request: NextRequest) {
   const requestLogger = logger.child({ endpoint: '/api/content/upload', method: 'POST' });
+  let body: any = {};
+  let file: File | null = null;
+  let videoUrl: string | undefined;
+  let contentText: string | undefined;
+  let platform: Platform | undefined;
+  let contentTypeParam: ContentType | undefined;
+  let userId: string | undefined;
   
   try {
     requestLogger.info('Content upload request received');
@@ -19,13 +28,6 @@ export async function POST(request: NextRequest) {
     // Step 1: Parse request (multipart/form-data or JSON)
     requestLogger.debug('Parsing request');
     const contentType = request.headers.get('content-type') || '';
-    let body: any = {};
-    let file: File | null = null;
-    let videoUrl: string | undefined;
-    let contentText: string | undefined;
-    let platform: Platform | undefined;
-    let contentTypeParam: ContentType | undefined;
-    let userId: string | undefined;
 
     if (contentType.includes('multipart/form-data')) {
       const formData = await request.formData();
@@ -289,6 +291,7 @@ export async function POST(request: NextRequest) {
 
   } catch (err) {
     requestLogger.error('Unexpected error in content upload', err);
+    trackServerError(err as Error, { userId: userId ?? "" }, userId ?? "");
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Internal server error' },
       { status: 500 }
