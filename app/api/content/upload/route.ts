@@ -9,56 +9,46 @@ import { format } from 'date-fns';
 import crypto from 'crypto';
 import { SUPABASE_STORAGE_BUCKETS } from '@/lib/utils';
 import { trackServerError } from '@/lib/posthog/server';
+import { dataTagErrorSymbol } from '@tanstack/react-query';
 
 
 export async function POST(request: NextRequest) {
   const requestLogger = logger.child({ endpoint: '/api/content/upload', method: 'POST' });
-  let body: any = {};
-  let file: File | null = null;
-  let videoUrl: string | undefined;
-  let contentText: string | undefined;
-  let platform: Platform | undefined;
-  let contentTypeParam: ContentType | undefined;
-  let userId: string | undefined;
+  let body: any = await request.json();
+  const file: File | null = body.file;
+  const contentText: string | undefined = body.content_text;
+  const platform: Platform | undefined = body.platform;
+  const contentTypeParam: ContentType | undefined = body.content_type;
+  const userId: string | undefined = body.user_id;
+  const analyticsId: string | undefined = body.analytics_id;
+
+  const missingFields: Record<string, any> = {};
+  if (!analyticsId) missingFields.analytics_id = analyticsId;
+  if (!userId) missingFields.user_id = userId;
+  if (!platform) missingFields.platform = platform;
+  if (!contentTypeParam) missingFields.content_type = contentTypeParam;
+
+  if (Object.keys(missingFields).length > 0) {
+    return NextResponse.json(
+      { error: 'Missing required fields', missing: missingFields },
+      { status: 400 }
+    );
+  }
+
   
   try {
     requestLogger.info('Content upload request received');
-    const videoId = crypto.randomUUID();
 
     // Step 1: Parse request (multipart/form-data or JSON)
     requestLogger.debug('Parsing request');
-    const contentType = request.headers.get('content-type') || '';
-
-    if (contentType.includes('multipart/form-data')) {
-      const formData = await request.formData();
-      file = formData.get('file') as File | null;
-      videoUrl = formData.get('video_url') as string | undefined;
-      contentText = formData.get('content_text') as string | undefined;
-      platform = formData.get('platform') as Platform | undefined;
-      contentTypeParam = formData.get('content_type') as ContentType | undefined;
-      userId = formData.get('user_id') as string | undefined;
-    } else {
-      body = await request.json();
-      videoUrl = body.video_url;
-      contentText = body.content_text;
-      platform = body.platform;
-      contentTypeParam = body.content_type;
-      userId = body.user_id;
-    }
-
     requestLogger.info('Request parsed', { 
-      hasFile: !!file, 
-      hasVideoUrl: !!videoUrl, 
-      hasContentText: !!contentText,
+      analyticsId,
+      userId,
       platform,
-      content_type: contentTypeParam 
+      contentTypeParam,
+      contentText,
+      file,
     });
-
-    // Step 2: Validate inputs
-    if (!userId) {
-      requestLogger.warn('User ID missing from request');
-      return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
-    }
 
     // Step 3: Create supabase client using userId, then read user from it
     requestLogger.debug('Initializing Supabase client', { userId });
@@ -78,86 +68,10 @@ export async function POST(request: NextRequest) {
       requestLogger.warn('User mismatch for upload request', { userId, authedUserId: user.id });
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    if (!platform) {
-      requestLogger.warn('Platform missing from request');
-      return NextResponse.json({ error: 'Platform is required' }, { status: 400 });
-    }
-
-    if (!contentTypeParam) {
-      requestLogger.warn('Content type missing from request');
-      return NextResponse.json({ error: 'Content type is required' }, { status: 400 });
-    }
-
-    // Validate based on content type
-    if (contentTypeParam === 'video' && !videoUrl && !file) {
-      requestLogger.warn('Video URL or file required for video content');
-      return NextResponse.json({ error: 'Video URL or file is required for video content' }, { status: 400 });
-    }
     
     if (contentTypeParam === 'text' && (!contentText || contentText.trim().length === 0)) {
       requestLogger.warn('Content text required for text content');
       return NextResponse.json({ error: 'Content text is required for text content' }, { status: 400 });
-    }
-
-    // Step 4: Handle file upload if present
-    let videoFilePath: string | null = null;
-    if (file) {
-      requestLogger.debug('Uploading file to storage');
-      const fileBuffer = await file.arrayBuffer();
-      const fileExtension = file.name.split('.').pop() || 'mp4';
-      const storagePath = `videos/${videoId}.${fileExtension}`;
-
-      const { error: uploadError } = await supabaseAdmin.storage
-        .from(SUPABASE_STORAGE_BUCKETS.VIDEOS)
-        .upload(storagePath, Buffer.from(fileBuffer), {
-          contentType: file.type || 'video/mp4',
-          upsert: true,
-        });
-
-      if (uploadError) {
-        requestLogger.error('File upload failed', uploadError);
-        return NextResponse.json({ error: `File upload failed: ${uploadError.message}` }, { status: 500 });
-      }
-
-      videoFilePath = storagePath;
-      requestLogger.info('File uploaded successfully', { storagePath });
-    }
-
-    // Step 5: Validate video URL if provided
-    let validatedPlatform = platform;
-    if (videoUrl) {
-      requestLogger.debug('Validating video URL', { video_url: videoUrl });
-      const validation = validateVideoUrl(videoUrl);
-      
-      if (!validation.valid) {
-        requestLogger.warn('Video URL validation failed', { 
-          video_url: videoUrl, 
-          error: validation.error 
-        });
-        return NextResponse.json({ error: validation.error }, { status: 400 });
-      }
-
-      validatedPlatform = validation.platform!;
-      requestLogger.info('Video URL validated', { platform: validatedPlatform, video_url: videoUrl });
-    }
-
-    // Step 6: Fetch basic info for video content (if URL provided)
-    let basicInfo: { title?: string; description?: string; thumbnail?: string } = {};
-    if (contentTypeParam === 'video' && videoUrl) {
-      requestLogger.debug('Fetching basic video info', { platform: validatedPlatform, video_url: videoUrl });
-      try {
-        basicInfo = await fetchVideoBasicInfo(videoUrl, validatedPlatform as any);
-        requestLogger.info('Basic video info fetched', { 
-          hasTitle: !!basicInfo.title, 
-          hasDescription: !!basicInfo.description,
-          hasThumbnail: !!basicInfo.thumbnail 
-        });
-      } catch (basicInfoError) {
-        requestLogger.error('Failed to fetch basic video info', basicInfoError, { platform: validatedPlatform, video_url: videoUrl });
-        // Continue with empty basic info
-        basicInfo = {};
-      }
     }
 
     // Step 7: Generate default title from timestamp
@@ -167,34 +81,41 @@ export async function POST(request: NextRequest) {
     // Step 8: Insert content record into database
     requestLogger.debug('Inserting content record into database', { 
       userId: userId, 
-      platform: validatedPlatform, 
+      platform: platform, 
       content_type: contentTypeParam 
     });
 
-    const videoPath = `videos/${videoId}.mp4`;
-    const { data: videoData } = supabaseAdmin.storage.from(SUPABASE_STORAGE_BUCKETS.VIDEOS).getPublicUrl(videoPath);
-    
+    let videoPath: string | null = null;
+    let videoUrl: string = '';
+
+    if (contentTypeParam === 'video') {
+      videoPath = `videos/${analyticsId}.mp4`;
+      const { data: videoData } = supabaseAdmin.storage.from(SUPABASE_STORAGE_BUCKETS.VIDEOS).getPublicUrl(videoPath);
+      videoUrl = videoData?.publicUrl || '';
+    }
+
     const { data: contentRecord, error: insertError } = await supabase
       .from('content_analytics')
       .insert({
-        id: videoId,
+        id: analyticsId,
         user_id: userId,
-        video_url: videoData.publicUrl || '',
-        platform: validatedPlatform,
+        video_url: videoUrl,
+        platform: platform,
         content_type: contentTypeParam,
         content_text: contentText || null,
-        video_file_path: videoFilePath,
-        title: basicInfo.title || defaultTitle,
-        description: basicInfo.description || '',
+        video_file_path: videoPath,
+        title: defaultTitle,
+        description: '',
         processing_status: 'pending',
       })
       .select()
       .single();
 
+
     if (insertError) {
       requestLogger.error('Failed to insert content record', insertError, {
         userId: userId,
-        platform: validatedPlatform,
+        platform: platform,
         errorCode: insertError.code,
         errorMessage: insertError.message,
         errorDetails: insertError.details,
@@ -205,7 +126,7 @@ export async function POST(request: NextRequest) {
     requestLogger.info('Content record created', { 
       analyticsId: contentRecord.id, 
       userId: userId,
-      platform: validatedPlatform 
+      platform: platform 
     });
 
     // Step 9: Trigger Trigger.dev task
