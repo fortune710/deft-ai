@@ -5,7 +5,7 @@ import {
   upsertProgress,
   updateProgress,
   deleteProgress,
-} from "@/lib/services/content-analytics-progress";
+} from "@/lib/api/content-analytics-progress";
 import { downloadVideo } from "@/lib/services/video-processor";
 import { extractAudioFromVideo } from "@/lib/services/video-processor";
 import { extractThumbnailFromVideo } from "@/lib/services/video-processor";
@@ -46,7 +46,7 @@ export const processContentAnalyticsTask = task({
     try {
       // Step 1: Fetch content record
       logger.log("Fetching content record", { analyticsId, userId });
-      await upsertProgress(analyticsId, userId, 5, "queued", "Fetching content record...");
+      await upsertProgress(supabase, analyticsId, userId, 5, "queued", "Fetching content record...");
 
       const { data: content, error: contentError } = await supabase
         .from("content_analytics")
@@ -68,7 +68,7 @@ export const processContentAnalyticsTask = task({
       }
 
       // Step 3: Mark as completed
-      await updateProgress(analyticsId, {
+      await updateProgress(supabase, analyticsId, {
         progress: 100,
         stage: "completed",
         status: "completed",
@@ -82,7 +82,7 @@ export const processContentAnalyticsTask = task({
         .eq("id", analyticsId);
 
       // Clean up progress
-      await deleteProgress(analyticsId);
+      await deleteProgress(supabase, analyticsId);
 
       logger.log("Content analytics processing completed", { analyticsId, userId });
 
@@ -97,7 +97,7 @@ export const processContentAnalyticsTask = task({
 
       // Update progress with error
       try {
-        await updateProgress(analyticsId, {
+        await updateProgress(supabase, analyticsId, {
           progress: 0,
           stage: "completed",
           status: "failed",
@@ -121,15 +121,19 @@ export const processContentAnalyticsTask = task({
   },
   onCancel: async ({ payload }) => {
     const analyticsId = payload?.analyticsId;
-    if (!analyticsId) {
+    const userId = payload?.userId;
+
+    if (!analyticsId || !userId) {
       logger.error("Task cancelled but no analyticsId available for cleanup");
       return;
     }
 
+    const supabase = createSupabaseClient(userId);
+
     logger.log("Task cancelled - cleaning up progress", { analyticsId });
 
     try {
-      await deleteProgress(analyticsId);
+      await deleteProgress(supabase, analyticsId);
       logger.log("Progress cleaned up successfully after cancellation", { analyticsId });
     } catch (cleanupError) {
       logger.error("Failed to clean up progress on cancel", { cleanupError, analyticsId });
@@ -138,12 +142,18 @@ export const processContentAnalyticsTask = task({
   onFailure: async ({ payload, error, ctx }) => {
     const analyticsId = payload?.analyticsId || (ctx as any)?.analyticsId;
 
-    if (!analyticsId) {
-      logger.error("Task failed but no analyticsId available for cleanup", {
+    const userId = payload?.userId || (ctx as any)?.userId;
+
+    if (!analyticsId || !userId) {
+      logger.error("Task failed but no analyticsId or userId available for cleanup", {
         error: error instanceof Error ? error.message : "Unknown error",
+        analyticsId,
+        userId,
       });
       return;
     }
+
+    const supabase = createSupabaseClient(userId);
 
     logger.error("Task failed - cleaning up progress", {
       error: error instanceof Error ? error.message : "Unknown error",
@@ -151,7 +161,7 @@ export const processContentAnalyticsTask = task({
     });
 
     try {
-      await deleteProgress(analyticsId);
+      await deleteProgress(supabase, analyticsId);
       logger.log("Progress cleaned up successfully", { analyticsId });
     } catch (cleanupError) {
       logger.error("Failed to clean up progress on failure", { cleanupError, analyticsId });
@@ -169,7 +179,7 @@ async function processVideoContent(
   let videoFilePath = content.video_file_path;
   if (!videoFilePath && content.video_url) {
     logger.log("Downloading video", { analyticsId, platform: content.platform });
-    await upsertProgress(analyticsId, userId, 10, "download", "Downloading video...");
+    await upsertProgress(supabase, analyticsId, userId, 10, "download", "Downloading video...");
     
     const downloadResult = await downloadVideo(
       content.video_url,
@@ -192,7 +202,7 @@ async function processVideoContent(
 
   // Step 2: Extract thumbnail
   logger.log("Extracting thumbnail", { analyticsId });
-  await upsertProgress(analyticsId, userId, 30, "extract_thumbnail", "Extracting thumbnail...");
+  await upsertProgress(supabase, analyticsId, userId, 30, "extract_thumbnail", "Extracting thumbnail...");
 
   const thumbnailResult = await extractThumbnailFromVideo(analyticsId);
 
@@ -207,7 +217,7 @@ async function processVideoContent(
 
   // Step 3: Extract audio
   logger.log("Extracting audio", { analyticsId });
-  await upsertProgress(analyticsId, userId, 40, "extract_audio", "Extracting audio...");
+  await upsertProgress(supabase, analyticsId, userId, 40, "extract_audio", "Extracting audio...");
 
   const audioResult = await extractAudioFromVideo(analyticsId);
 
@@ -223,7 +233,7 @@ async function processVideoContent(
 
   // Step 4: Transcribe audio
   logger.log("Transcribing audio", { analyticsId });
-  await upsertProgress(analyticsId, userId, 60, "transcribe", "Transcribing audio...");
+  await upsertProgress(supabase, analyticsId, userId, 60, "transcribe", "Transcribing audio...");
 
   const transcriptionResult = await transcribeAudioFile(analyticsId);
 
@@ -239,7 +249,7 @@ async function processVideoContent(
 
   // Step 5: Analyze content
   logger.log("Analyzing content", { analyticsId });
-  await upsertProgress(analyticsId, userId, 80, "analyze", "Analyzing content...");
+  await upsertProgress(supabase, analyticsId, userId, 80, "analyze", "Analyzing content...");
 
   const feedbackResult = await generateContentFeedback(analyticsId, userId);
 
@@ -266,7 +276,7 @@ async function processTextContent(
 
   // Step 1: Analyze text content
   logger.log("Analyzing text content", { analyticsId });
-  await upsertProgress(analyticsId, userId, 50, "analyze", "Analyzing text content...");
+  await upsertProgress(supabase, analyticsId, userId, 50, "analyze", "Analyzing text content...");
 
   const feedbackResult = await generateContentFeedback(analyticsId, userId);
 

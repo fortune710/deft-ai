@@ -1,22 +1,9 @@
-import { createClient } from '@supabase/supabase-js';
+import { SupabaseClient } from '@supabase/supabase-js';
 import type { ContentAnalyticsProgress, ProcessingStep, QueueStatus } from '@/types/content-analytics';
 
-function getSupabaseClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl) {
-    throw new Error('NEXT_PUBLIC_SUPABASE_URL environment variable is not set');
-  }
-  if (!supabaseServiceKey) {
-    throw new Error('SUPABASE_SERVICE_ROLE_KEY environment variable is not set. Please add it to your .env file.');
-  }
-  return createClient(supabaseUrl, supabaseServiceKey);
-}
-
-const supabase = getSupabaseClient();
 
 export async function createProgress(
+  supabase: SupabaseClient,
   analyticsId: string,
   userId: string,
   progress: number,
@@ -44,6 +31,7 @@ export async function createProgress(
 }
 
 export async function upsertProgress(
+  supabase: SupabaseClient,
   analyticsId: string,
   userId: string,
   progress: number,
@@ -76,6 +64,7 @@ export async function upsertProgress(
 }
 
 export async function updateProgress(
+  supabase: SupabaseClient,
   analyticsId: string,
   updates: {
     progress?: number;
@@ -113,7 +102,7 @@ export async function updateProgress(
   return data;
 }
 
-export async function deleteProgress(analyticsId: string): Promise<void> {
+export async function deleteProgress(supabase: SupabaseClient, analyticsId: string): Promise<void> {
   const { error } = await supabase
     .from('content_analytics_progress')
     .delete()
@@ -124,7 +113,7 @@ export async function deleteProgress(analyticsId: string): Promise<void> {
   }
 }
 
-export async function getProgress(analyticsId: string): Promise<ContentAnalyticsProgress | null> {
+export async function getProgress(supabase: SupabaseClient, analyticsId: string): Promise<ContentAnalyticsProgress | null> {
   const { data, error } = await supabase
     .from('content_analytics_progress')
     .select('*')
@@ -141,7 +130,7 @@ export async function getProgress(analyticsId: string): Promise<ContentAnalytics
   return data;
 }
 
-export async function getProgressByUserId(userId: string): Promise<ContentAnalyticsProgress | null> {
+export async function getProgressByUserId(supabase: SupabaseClient, userId: string): Promise<ContentAnalyticsProgress | null> {
   const { data, error } = await supabase
     .from('content_analytics_progress')
     .select('*')
