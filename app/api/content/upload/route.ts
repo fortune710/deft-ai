@@ -1,15 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient, supabaseAdmin } from '@/lib/supabase/server';
-import { validateVideoUrl } from '@/lib/validations/video-analytics';
-import { fetchVideoBasicInfo } from '@/lib/services/platform-scrapers';
 import { logger } from '@/lib/logger';
 import { processContentAnalyticsTask } from '@/trigger/process-content-analytics';
 import type { Platform, ContentType } from '@/types/content-analytics';
 import { format } from 'date-fns';
-import crypto from 'crypto';
 import { SUPABASE_STORAGE_BUCKETS } from '@/lib/utils';
 import { trackServerError } from '@/lib/posthog/server';
-import { dataTagErrorSymbol } from '@tanstack/react-query';
+
 
 
 export async function POST(request: NextRequest) {
