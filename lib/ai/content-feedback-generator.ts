@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import type { AIFeedback, ContentAnalytics, FeedbackGenerationResult, VideoMetrics, ContentType } from '@/types/content-analytics';
 import { extractHookTranscript } from '@/lib/services/transcription';
 import { generateWithModel } from './models';
@@ -21,7 +21,7 @@ interface HistoricalContent {
   analysis_results: AIFeedback | null;
 }
 
-export async function fetchUserContentHistory(userId: string, limit: number = 5): Promise<HistoricalContent[]> {
+export async function fetchUserContentHistory(supabase: SupabaseClient, userId: string, limit: number = 5): Promise<HistoricalContent[]> {
   try {
     const { data, error } = await supabase
       .from('content_analytics')
@@ -314,9 +314,9 @@ function parseAIResponse(response: string): AIFeedback {
   try {
     const jsonMatch = response.match(/```json\n([\s\S]*?)\n```/);
     const jsonString = jsonMatch ? jsonMatch[1] : response;
+    console.log('jsonString', jsonString);
 
     const parsed = JSON.parse(jsonString);
-
     return {
       ...parsed,
       generated_at: new Date().toISOString(),
@@ -343,7 +343,11 @@ export async function analyzeTextContent(contentText: string, platform: string):
   return parseAIResponse(text);
 }
 
-export async function generateContentFeedback(analyticsId: string, userId: string): Promise<FeedbackGenerationResult> {
+export async function generateContentFeedback(
+  supabase: SupabaseClient,
+  analyticsId: string, 
+  userId: string
+): Promise<FeedbackGenerationResult> {
   try {
     const { data: content, error: contentError } = await supabase
       .from('content_analytics')
@@ -355,7 +359,7 @@ export async function generateContentFeedback(analyticsId: string, userId: strin
       return { success: false, error: 'Content not found' };
     }
 
-    const historicalContent = await fetchUserContentHistory(userId);
+    const historicalContent = await fetchUserContentHistory(supabase, userId);
 
     let prompt: string;
     if (content.content_type === 'text') {
