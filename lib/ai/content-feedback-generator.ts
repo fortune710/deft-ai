@@ -345,8 +345,9 @@ export async function analyzeTextContent(contentText: string, platform: string):
 
 export async function generateContentFeedback(
   supabase: SupabaseClient,
-  analyticsId: string, 
-  userId: string
+  analyticsId: string,
+  userId: string,
+  options: { persist?: boolean } = {}
 ): Promise<FeedbackGenerationResult> {
   try {
     const { data: content, error: contentError } = await supabase
@@ -383,13 +384,16 @@ export async function generateContentFeedback(
 
     const feedback = parseAIResponse(text);
 
-    const { error: updateError } = await supabase
-      .from('content_analytics')
-      .update({ analysis_results: feedback })
-      .eq('id', analyticsId);
+    const { persist = true } = options;
+    if (persist) {
+      const { error: updateError } = await supabase
+        .from('content_analytics')
+        .update({ analysis_results: feedback })
+        .eq('id', analyticsId);
 
-    if (updateError) {
-      return { success: false, error: `Failed to save feedback: ${updateError.message}` };
+      if (updateError) {
+        return { success: false, error: `Failed to save feedback: ${updateError.message}` };
+      }
     }
 
     return { success: true, feedback };
