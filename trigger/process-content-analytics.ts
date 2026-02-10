@@ -1,17 +1,9 @@
 import { logger, task } from "@trigger.dev/sdk/v3";
 import { createClient } from "@supabase/supabase-js";
-import {
-  createProgress,
-  upsertProgress,
-  updateProgress,
-  deleteProgress,
-} from "@/lib/api/content-analytics-progress";
 import { downloadVideo } from "@/lib/services/video-processor";
-import { extractAudioFromVideo } from "@/lib/services/video-processor";
 import { extractThumbnailFromVideo } from "@/lib/services/video-processor";
-import { transcribeAudioFile } from "@/lib/services/transcription";
 import { generateContentFeedback } from "@/lib/ai/content-feedback-generator";
-import type { ContentAnalytics, Platform, ContentType } from "@/types/content-analytics";
+import type { ContentAnalytics, Platform } from "@/types/content-analytics";
 import { getUserToken } from "@/lib/auth/get-token";
 import jwt from "jsonwebtoken";
 
@@ -270,75 +262,7 @@ async function processVideoContent(
     logger.warn("Thumbnail extraction failed", { error: thumbnailResult.error, analyticsId });
   }
 
-  // Step 3: Extract audio
-  logger.log("Extracting audio", { analyticsId });
-
-  const audioResult = await extractAudioFromVideo(analyticsId);
-
-  if (!audioResult.success) {
-    throw new Error(`Audio extraction failed: ${audioResult.error}`);
-  }
-
-  // Update content with audio file path
-  logger.log("Updating content with audio file path", { analyticsId, audioFilePath: audioResult.storage_path });
-  const { data: audioUpdateData, error: audioUpdateError } = await supabase
-    .from("content_analytics")
-    .update({ audio_file_path: audioResult.storage_path })
-    .eq("id", analyticsId)
-    .select();
-
-  if (audioUpdateError) {
-    logger.error("Failed to update audio file path", {
-      error: audioUpdateError.message,
-      code: audioUpdateError.code,
-      details: audioUpdateError.details,
-      analyticsId,
-      audioFilePath: audioResult.storage_path
-    });
-  } else {
-    logger.log("Audio file path updated successfully", {
-      analyticsId,
-      audioFilePath: audioResult.storage_path,
-      updatedData: audioUpdateData
-    });
-  }
-
-  // Step 4: Transcribe audio
-  logger.log("Transcribing audio", { analyticsId });
-
-  const transcriptionResult = await transcribeAudioFile(analyticsId);
-
-  if (!transcriptionResult.success || !transcriptionResult.transcript) {
-    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
-  }
-
-  // Update content with transcript
-  logger.log("Updating content with transcript", { 
-    analyticsId, 
-    transcriptLength: transcriptionResult.transcript?.length 
-  });
-  const { data: transcriptUpdateData, error: transcriptUpdateError } = await supabase
-    .from("content_analytics")
-    .update({ transcript: transcriptionResult.transcript })
-    .eq("id", analyticsId)
-    .select();
-
-  if (transcriptUpdateError) {
-    logger.error("Failed to update transcript", {
-      error: transcriptUpdateError.message,
-      code: transcriptUpdateError.code,
-      details: transcriptUpdateError.details,
-      analyticsId
-    });
-  } else {
-    logger.log("Transcript updated successfully", {
-      analyticsId,
-      transcriptLength: transcriptionResult.transcript?.length,
-      updatedData: transcriptUpdateData
-    });
-  }
-
-  // Step 5: Analyze content
+  // Step 3: Analyze content
   logger.log("Analyzing content", { analyticsId });
 
   const feedbackResult = await generateContentFeedback(supabase,analyticsId, userId);
