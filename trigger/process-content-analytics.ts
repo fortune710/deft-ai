@@ -5,6 +5,11 @@ import { extractThumbnailFromVideo } from "@/lib/services/video-processor";
 import { generateContentFeedback } from "@/lib/ai/content-feedback-generator";
 import type { ContentAnalytics, Platform } from "@/types/content-analytics";
 import { getUserToken } from "@/lib/auth/get-token";
+import {
+  upsertProgress,
+  updateProgress,
+} from "@/lib/api/content-analytics-progress";
+import { runContentAnalysisOrchestrator } from "@/lib/ai/orchestrator/content-analysis-orchestrator";
 import jwt from "jsonwebtoken";
 
 interface ProcessContentAnalyticsPayload {
@@ -59,47 +64,32 @@ export const processContentAnalyticsTask = task({
     (ctx as any).supabase = supabase;
 
     try {
-      // Step 1: Fetch content record
-      logger.log("Fetching content record", { analyticsId, userId });
-
-      const { data: content, error: contentError } = await supabase
-        .from("content_analytics")
-        .select("*")
-        .eq("id", analyticsId)
-        .maybeSingle();
-
-      if (contentError) {
-        logger.error("Failed to fetch content record", { 
-          error: contentError.message, 
-          code: contentError.code,
-          details: contentError.details,
-          analyticsId,
-          userId
-        });
-        throw new Error(`Content not found: ${contentError} ${content}`);
-      }
-
-      if (!content) {
-        logger.error("Content record not found", { analyticsId, userId, contentError, content });
-        throw new Error("Content not found: " + contentError + " " + content);
-      }
-
-      logger.log("Content record fetched successfully", { 
-        analyticsId, 
+      await upsertProgress(
+        supabase,
+        analyticsId,
         userId,
-        contentType: content.content_type,
-        platform: content.platform,
-        processingStatus: content.processing_status
-      });
+        0,
+        "queued",
+        "Queued for content analysis"
+      );
 
-      // Step 2: Process based on content type
-      if (content.content_type === "video") {
-        await processVideoContent(content, userId, analyticsId, supabase);
-      } else if (content.content_type === "text") {
-        await processTextContent(content, userId, analyticsId, supabase);
-      } else {
-        throw new Error(`Unknown content type: ${content.content_type}`);
-      }
+      await runContentAnalysisOrchestrator({
+        supabase,
+        analyticsId,
+        userId,
+        logger,
+        onProgress: async (event) => {
+          const message = event.details ? `${event.message} - ${event.details}` : event.message;
+          await upsertProgress(
+            supabase,
+            analyticsId,
+            userId,
+            event.progress,
+            event.step,
+            message
+          );
+        },
+      });
 
       // Update content status
       logger.log("Updating content status to completed", { analyticsId, userId });
@@ -124,6 +114,13 @@ export const processContentAnalyticsTask = task({
           updatedData: updateData
         });
       }
+
+      await updateProgress(supabase, analyticsId, {
+        progress: 100,
+        stage: "completed",
+        status: "completed",
+        message: "Content analysis completed",
+      });
 
       logger.log("Content analytics processing completed", { analyticsId, userId });
 
@@ -168,6 +165,10 @@ export const processContentAnalyticsTask = task({
             errorMessage
           });
         }
+        await updateProgress(supabase, analyticsId, {
+          status: "failed",
+          message: errorMessage,
+        });
       } catch (updateError) {
         logger.error("Failed to update error status", { 
           updateError,
