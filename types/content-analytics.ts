@@ -109,6 +109,7 @@ export interface ContentAnalytics {
   thumbnail_url: string | null;
   video_file_path: string | null;
   audio_file_path: string | null;
+  model_file_reference: string | null;
   processing_status: ProcessingStatus;
   processing_error: string | null;
   created_at: string;

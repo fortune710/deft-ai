@@ -1,5 +1,10 @@
 import { logger, task } from "@trigger.dev/sdk/v3";
 import { createClient } from "@supabase/supabase-js";
+import { downloadVideo } from "@/lib/services/video-processor";
+import { extractThumbnailFromVideo } from "@/lib/services/video-processor";
+import { generateContentFeedback } from "@/lib/ai/content-feedback-generator";
+import type { ContentAnalytics, Platform } from "@/types/content-analytics";
+import { getUserToken } from "@/lib/auth/get-token";
 import {
   upsertProgress,
   updateProgress,
@@ -177,3 +182,162 @@ export const processContentAnalyticsTask = task({
     }
   }
 });
+
+async function processVideoContent(
+  content: ContentAnalytics,
+  userId: string,
+  analyticsId: string,
+  supabase: ReturnType<typeof createSupabaseClient>
+) {
+  // Step 1: Download video (if not already uploaded)
+  let videoFilePath = content.video_file_path;
+  if (!videoFilePath && content.video_url) {
+    logger.log("Downloading video", { analyticsId, platform: content.platform });
+    
+    const downloadResult = await downloadVideo(
+      content.video_url,
+      analyticsId,
+      content.platform as Platform
+    );
+
+    if (!downloadResult.success) {
+      throw new Error(`Video download failed: ${downloadResult.error}`);
+    }
+
+    videoFilePath = downloadResult.storage_path || downloadResult.file_path || null;
+
+    // Update content with video file path
+    logger.log("Updating content with video file path", { analyticsId, videoFilePath });
+    const { data: videoUpdateData, error: videoUpdateError } = await supabase
+      .from("content_analytics")
+      .update({ video_file_path: videoFilePath })
+      .eq("id", analyticsId)
+      .select();
+
+    if (videoUpdateError) {
+      logger.error("Failed to update video file path", {
+        error: videoUpdateError.message,
+        code: videoUpdateError.code,
+        details: videoUpdateError.details,
+        analyticsId,
+        videoFilePath
+      });
+    } else {
+      logger.log("Video file path updated successfully", {
+        analyticsId,
+        videoFilePath,
+        updatedData: videoUpdateData
+      });
+    }
+  }
+
+  // Step 2: Extract thumbnail
+  logger.log("Extracting thumbnail", { analyticsId });
+
+  const thumbnailResult = await extractThumbnailFromVideo(analyticsId);
+
+  if (thumbnailResult.success && thumbnailResult.thumbnail_url) {
+    logger.log("Updating content with thumbnail URL", { analyticsId, thumbnailUrl: thumbnailResult.thumbnail_url });
+    const { data: thumbnailUpdateData, error: thumbnailUpdateError } = await supabase
+      .from("content_analytics")
+      .update({ thumbnail_url: thumbnailResult.thumbnail_url })
+      .eq("id", analyticsId)
+      .select();
+
+    if (thumbnailUpdateError) {
+      logger.error("Failed to update thumbnail URL", {
+        error: thumbnailUpdateError.message,
+        code: thumbnailUpdateError.code,
+        details: thumbnailUpdateError.details,
+        analyticsId,
+        thumbnailUrl: thumbnailResult.thumbnail_url
+      });
+    } else {
+      logger.log("Thumbnail URL updated successfully", {
+        analyticsId,
+        thumbnailUrl: thumbnailResult.thumbnail_url,
+        updatedData: thumbnailUpdateData
+      });
+    }
+  } else {
+    logger.warn("Thumbnail extraction failed", { error: thumbnailResult.error, analyticsId });
+  }
+
+  // Step 3: Analyze content
+  logger.log("Analyzing content", { analyticsId });
+
+  const feedbackResult = await generateContentFeedback(supabase,analyticsId, userId);
+
+  if (!feedbackResult.success || !feedbackResult.feedback) {
+    throw new Error(`Content analysis failed: ${feedbackResult.error}`);
+  }
+
+  // Update content with analysis results
+  logger.log("Updating content with analysis results", { 
+    analyticsId,
+    feedbackKeys: feedbackResult.feedback ? Object.keys(feedbackResult.feedback) : []
+  });
+  const { data: feedbackUpdateData, error: feedbackUpdateError } = await supabase
+    .from("content_analytics")
+    .update({ analysis_results: feedbackResult.feedback })
+    .eq("id", analyticsId)
+    .select();
+
+  if (feedbackUpdateError) {
+    logger.error("Failed to update analysis results", {
+      error: feedbackUpdateError.message,
+      code: feedbackUpdateError.code,
+      details: feedbackUpdateError.details,
+      analyticsId
+    });
+  } else {
+    logger.log("Analysis results updated successfully", {
+      analyticsId,
+      updatedData: feedbackUpdateData
+    });
+  }
+}
+
+async function processTextContent(
+  content: ContentAnalytics,
+  userId: string,
+  analyticsId: string,
+  supabase: ReturnType<typeof createSupabaseClient>
+) {
+  if (!content.content_text || content.content_text.trim().length === 0) {
+    throw new Error("Content text is required for text analysis");
+  }
+
+  // Step 1: Analyze text content
+  logger.log("Analyzing text content", { analyticsId });
+  const feedbackResult = await generateContentFeedback(supabase, analyticsId, userId);
+
+  if (!feedbackResult.success || !feedbackResult.feedback) {
+    throw new Error(`Text analysis failed: ${feedbackResult.error}`);
+  }
+
+  // Update content with analysis results
+  logger.log("Updating text content with analysis results", { 
+    analyticsId,
+    feedbackKeys: feedbackResult.feedback ? Object.keys(feedbackResult.feedback) : []
+  });
+  const { data: feedbackUpdateData, error: feedbackUpdateError } = await supabase
+    .from("content_analytics")
+    .update({ analysis_results: feedbackResult.feedback })
+    .eq("id", analyticsId)
+    .select();
+
+  if (feedbackUpdateError) {
+    logger.error("Failed to update text content analysis results", {
+      error: feedbackUpdateError.message,
+      code: feedbackUpdateError.code,
+      details: feedbackUpdateError.details,
+      analyticsId
+    });
+  } else {
+    logger.log("Text content analysis results updated successfully", {
+      analyticsId,
+      updatedData: feedbackUpdateData
+    });
+  }
+}
