@@ -151,7 +151,8 @@ export async function extractAudioFromVideo(videoId: string): Promise<AudioExtra
     });
 
     console.log(`[extractAudioFromVideo] Awaiting response...`);
-    const data = await response.json();
+    const result = await response.json();
+    const data = result.data;
     console.log(`[extractAudioFromVideo] Received response, status: ${response.status} (${response.ok ? 'OK' : 'ERROR'})`);
 
     if (!response.ok) {
@@ -199,7 +200,8 @@ export async function extractThumbnailFromVideo(
       return { success: false, error: errorData.error || 'Failed to extract thumbnail' };
     }
 
-    const data = await response.json();
+    const result = await response.json();
+    const data = result.data;
 
     return {
       success: true,

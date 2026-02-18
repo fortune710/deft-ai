@@ -222,7 +222,6 @@ export async function generateContentFeedback(
         .from('content_analytics')
         .update({
           analysis_results: videoResult.feedback,
-          model_file_reference: videoResult.modelFileReference,
         })
         .eq('id', analyticsId);
 
