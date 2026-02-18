@@ -138,20 +138,33 @@ export async function downloadVideo(
 
 export async function extractAudioFromVideo(videoId: string): Promise<AudioExtractionResult> {
   try {
-    const response = await fetch(process.env.YT_WORKER_URL + '/extract?audio=true&thumbnail=true', {
+    console.log(`[extractAudioFromVideo] Starting audio extraction for videoId: ${videoId}`);
+    const url = process.env.YT_WORKER_URL + '/extract?audio=true&thumbnail=true';
+    console.log(`[extractAudioFromVideo] Fetching: ${url} with video_id: ${videoId}`);
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ video_id: videoId }),
+      signal: AbortSignal.timeout(30000), // 30s timeout
     });
-    const data = await response.json();
+
+    console.log(`[extractAudioFromVideo] Awaiting response...`);
+    const result = await response.json();
+    const data = result.data;
+    console.log(`[extractAudioFromVideo] Received response, status: ${response.status} (${response.ok ? 'OK' : 'ERROR'})`);
+
     if (!response.ok) {
+      console.error(`[extractAudioFromVideo] Extraction failed for videoId ${videoId}:`, data.error);
       return { success: false, error: data.error };
     }
+    console.log(`[extractAudioFromVideo] Extraction successful for videoId ${videoId}, audio path: ${data.audio_path}`);
     return { success: true, storage_path: data.audio_path };
   } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+    const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+    console.error(`[extractAudioFromVideo] Exception during extraction for videoId ${videoId}:`, errorMsg);
+    return { success: false, error: errorMsg };
   }
 }
 
@@ -178,6 +191,7 @@ export async function extractThumbnailFromVideo(
       body: JSON.stringify({ 
         video_id: videoId
       }),
+      signal: AbortSignal.timeout(30000), // 30s timeout
     });
 
     if (!response.ok) {
@@ -186,7 +200,8 @@ export async function extractThumbnailFromVideo(
       return { success: false, error: errorData.error || 'Failed to extract thumbnail' };
     }
 
-    const data = await response.json();
+    const result = await response.json();
+    const data = result.data;
 
     return {
       success: true,

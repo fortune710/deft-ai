@@ -1,18 +1,15 @@
 import { logger, task } from "@trigger.dev/sdk/v3";
 import { createClient } from "@supabase/supabase-js";
+import { downloadVideo } from "@/lib/services/video-processor";
+import { extractThumbnailFromVideo } from "@/lib/services/video-processor";
+import { generateContentFeedback } from "@/lib/ai/content-feedback-generator";
+import type { ContentAnalytics, Platform } from "@/types/content-analytics";
+import { getUserToken } from "@/lib/auth/get-token";
 import {
-  createProgress,
   upsertProgress,
   updateProgress,
-  deleteProgress,
 } from "@/lib/api/content-analytics-progress";
-import { downloadVideo } from "@/lib/services/video-processor";
-import { extractAudioFromVideo } from "@/lib/services/video-processor";
-import { extractThumbnailFromVideo } from "@/lib/services/video-processor";
-import { transcribeAudioFile } from "@/lib/services/transcription";
-import { generateContentFeedback } from "@/lib/ai/content-feedback-generator";
-import type { ContentAnalytics, Platform, ContentType } from "@/types/content-analytics";
-import { getUserToken } from "@/lib/auth/get-token";
+import { runContentAnalysisOrchestrator } from "@/lib/ai/orchestrator/content-analysis-orchestrator";
 import jwt from "jsonwebtoken";
 
 interface ProcessContentAnalyticsPayload {
@@ -67,47 +64,32 @@ export const processContentAnalyticsTask = task({
     (ctx as any).supabase = supabase;
 
     try {
-      // Step 1: Fetch content record
-      logger.log("Fetching content record", { analyticsId, userId });
-
-      const { data: content, error: contentError } = await supabase
-        .from("content_analytics")
-        .select("*")
-        .eq("id", analyticsId)
-        .maybeSingle();
-
-      if (contentError) {
-        logger.error("Failed to fetch content record", { 
-          error: contentError.message, 
-          code: contentError.code,
-          details: contentError.details,
-          analyticsId,
-          userId
-        });
-        throw new Error(`Content not found: ${contentError} ${content}`);
-      }
-
-      if (!content) {
-        logger.error("Content record not found", { analyticsId, userId, contentError, content });
-        throw new Error("Content not found: " + contentError + " " + content);
-      }
-
-      logger.log("Content record fetched successfully", { 
-        analyticsId, 
+      await upsertProgress(
+        supabase,
+        analyticsId,
         userId,
-        contentType: content.content_type,
-        platform: content.platform,
-        processingStatus: content.processing_status
-      });
+        0,
+        "queued",
+        "Queued for content analysis"
+      );
 
-      // Step 2: Process based on content type
-      if (content.content_type === "video") {
-        await processVideoContent(content, userId, analyticsId, supabase);
-      } else if (content.content_type === "text") {
-        await processTextContent(content, userId, analyticsId, supabase);
-      } else {
-        throw new Error(`Unknown content type: ${content.content_type}`);
-      }
+      await runContentAnalysisOrchestrator({
+        supabase,
+        analyticsId,
+        userId,
+        logger,
+        onProgress: async (event) => {
+          const message = event.details ? `${event.message} - ${event.details}` : event.message;
+          await upsertProgress(
+            supabase,
+            analyticsId,
+            userId,
+            event.progress,
+            event.step,
+            message
+          );
+        },
+      });
 
       // Update content status
       logger.log("Updating content status to completed", { analyticsId, userId });
@@ -132,6 +114,13 @@ export const processContentAnalyticsTask = task({
           updatedData: updateData
         });
       }
+
+      await updateProgress(supabase, analyticsId, {
+        progress: 100,
+        stage: "completed",
+        status: "completed",
+        message: "Content analysis completed",
+      });
 
       logger.log("Content analytics processing completed", { analyticsId, userId });
 
@@ -176,6 +165,10 @@ export const processContentAnalyticsTask = task({
             errorMessage
           });
         }
+        await updateProgress(supabase, analyticsId, {
+          status: "failed",
+          message: errorMessage,
+        });
       } catch (updateError) {
         logger.error("Failed to update error status", { 
           updateError,
@@ -270,75 +263,7 @@ async function processVideoContent(
     logger.warn("Thumbnail extraction failed", { error: thumbnailResult.error, analyticsId });
   }
 
-  // Step 3: Extract audio
-  logger.log("Extracting audio", { analyticsId });
-
-  const audioResult = await extractAudioFromVideo(analyticsId);
-
-  if (!audioResult.success) {
-    throw new Error(`Audio extraction failed: ${audioResult.error}`);
-  }
-
-  // Update content with audio file path
-  logger.log("Updating content with audio file path", { analyticsId, audioFilePath: audioResult.storage_path });
-  const { data: audioUpdateData, error: audioUpdateError } = await supabase
-    .from("content_analytics")
-    .update({ audio_file_path: audioResult.storage_path })
-    .eq("id", analyticsId)
-    .select();
-
-  if (audioUpdateError) {
-    logger.error("Failed to update audio file path", {
-      error: audioUpdateError.message,
-      code: audioUpdateError.code,
-      details: audioUpdateError.details,
-      analyticsId,
-      audioFilePath: audioResult.storage_path
-    });
-  } else {
-    logger.log("Audio file path updated successfully", {
-      analyticsId,
-      audioFilePath: audioResult.storage_path,
-      updatedData: audioUpdateData
-    });
-  }
-
-  // Step 4: Transcribe audio
-  logger.log("Transcribing audio", { analyticsId });
-
-  const transcriptionResult = await transcribeAudioFile(analyticsId);
-
-  if (!transcriptionResult.success || !transcriptionResult.transcript) {
-    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
-  }
-
-  // Update content with transcript
-  logger.log("Updating content with transcript", { 
-    analyticsId, 
-    transcriptLength: transcriptionResult.transcript?.length 
-  });
-  const { data: transcriptUpdateData, error: transcriptUpdateError } = await supabase
-    .from("content_analytics")
-    .update({ transcript: transcriptionResult.transcript })
-    .eq("id", analyticsId)
-    .select();
-
-  if (transcriptUpdateError) {
-    logger.error("Failed to update transcript", {
-      error: transcriptUpdateError.message,
-      code: transcriptUpdateError.code,
-      details: transcriptUpdateError.details,
-      analyticsId
-    });
-  } else {
-    logger.log("Transcript updated successfully", {
-      analyticsId,
-      transcriptLength: transcriptionResult.transcript?.length,
-      updatedData: transcriptUpdateData
-    });
-  }
-
-  // Step 5: Analyze content
+  // Step 3: Analyze content
   logger.log("Analyzing content", { analyticsId });
 
   const feedbackResult = await generateContentFeedback(supabase,analyticsId, userId);
