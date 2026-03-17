@@ -7,8 +7,9 @@ import { QueryProvider } from '@/components/query-provider';
 import { Toaster } from '@/components/ui/toaster';
 import { Toaster as SonnerToaster } from '@/components/ui/sonner';
 import { PHProvider, PostHogPageView } from '@/lib/posthog/provider';
+import { cn } from '@/lib/utils';
+import { alanSans, lexendDeca, inter } from '@/lib/fonts';
 
-const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   title: 'Deft - The AI Operator for Modern Creators',
@@ -37,7 +38,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={inter.className}>
+      <body className={`${inter.variable} ${alanSans.variable} ${lexendDeca.variable}`}>
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"
