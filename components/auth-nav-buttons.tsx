@@ -45,9 +45,9 @@ export function AuthNavButtons() {
   // }
 
   return (
-    <div className='font-alan-sans bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex items-center gap-2 border rounded-xl p-2'>
-      <Link className='px-5 py-1.5' href="/login">Login</Link>
-      <Link className='text-black px-5 py-1.5 bg-primary/90 rounded-lg flex items-center gap-1.5 font-medium' href="/sign-up">
+    <div className='font-alan-sans bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 grid grid-cols-2 gap-2 border rounded-xl p-2'>
+      <Link className='px-5 py-1.5 text-center' href="/login">Login</Link>
+      <Link className='text-black px-5 py-1.5 bg-primary/90 rounded-lg flex items-center justify-center gap-1.5 font-medium' href="/sign-up">
         Sign Up
         <ArrowRight className='w-5 h-5' />
       </Link>
