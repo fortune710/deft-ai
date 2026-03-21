@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils"
 
 const features = [
     {
-        title: "Niche DNA Onboarding",
+        title: "Creator DNA",
         body: `Set it once, benefit forever.
         Deft builds a deep profile of your positioning, audience, content pillars, 
         and voice. Every output — scripts, 
@@ -54,10 +54,16 @@ export default function Features() {
                     features.map((feature) => (
                         <div
                             key={feature.title}
-                            className={cn("rounded-lg border border-border/40 bg-muted/30 p-6 transition-all hover:border-primary/40 hover:bg-muted/50", feature.className)}
+                            className={cn("rounded-2xl border border-border/40 bg-muted/20 p-8 transition-all hover:border-primary/40 hover:bg-muted/30 group", feature.className)}
                         >
-                            <h3 className="mb-2 font-bold">{feature.title}</h3>
-                            <p className="text-sm text-muted-foreground">
+                            <div className="aspect-video w-full rounded-xl bg-muted/40 mb-8 flex items-center justify-center border border-border/40 group-hover:bg-muted/60 transition-colors overflow-hidden">
+                                <div className="w-full h-full bg-gradient-to-br from-primary/5 to-transparent flex items-center justify-center">
+                                    <span className="text-muted-foreground/40 text-xs font-alan-sans uppercase tracking-[0.2em]">Visual Placeholder</span>
+                                </div>
+                            </div>
+
+                            <h3 className="mb-3 text-xl font-bold font-lexend-deca tracking-tight">{feature.title}</h3>
+                            <p className="text-base text-muted-foreground font-lexend-deca leading-relaxed">
                                 {feature.body}
                             </p>
                         </div>

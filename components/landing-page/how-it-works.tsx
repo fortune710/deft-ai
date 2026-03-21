@@ -8,7 +8,7 @@ const steps = [
         number: "01",
         title: "Tell Deft About You",
         duration: "~10 minutes",
-        description: "Answer a few targeted questions about your niche, audience, goals, and content style. Deft uses this to build your Niche DNA profile — the foundation everything else is built on.",
+        description: "Answer a few targeted questions about your niche, audience, goals, and content style. Deft uses this to build your creator DNA: the foundation everything else is built on.",
         icon: <Zap className="w-6 h-6 text-primary" />,
     },
     {
