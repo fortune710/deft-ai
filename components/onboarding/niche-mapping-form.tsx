@@ -209,57 +209,6 @@ export function NicheMappingForm({ onComplete }: NicheMappingFormProps) {
           </div>
         )}
       </div>
-
-      {/* Sticky Footer: Navigation (Only for Step 1) */}
-      {currentStep === 1 && (
-        <div className="sticky bottom-0 z-50 bg-background/60 backdrop-blur-xl border-t border-border/40 py-4 px-6 shadow-[0_-8px_40px_rgba(0,0,0,0.12)]">
-          <div className="max-w-5xl mx-auto flex justify-between items-center gap-4 w-full">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={handleBack}
-              disabled={currentStep === 1 || isSubmitting}
-              className="h-11 px-6 text-muted-foreground hover:text-foreground transition-all flex items-center gap-2 font-medium"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Back
-            </Button>
-
-            <div className="flex items-center gap-3">
-              {currentStep < totalSteps ? (
-                <Button
-                  type="button"
-                  onClick={handleNext}
-                  disabled={isSubmitting}
-                  className="h-11 px-8 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl shadow-lg shadow-primary/20 transition-all flex items-center gap-2"
-                >
-                  Next
-                  <ArrowRight className="w-4 h-4" />
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  onClick={handleSubmit}
-                  disabled={isSubmitting}
-                  className="h-11 px-8 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl shadow-lg shadow-primary/20 transition-all flex items-center gap-2"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Creating Engine...
-                    </>
-                  ) : (
-                    <>
-                      Complete Setup
-                      <ArrowRight className="w-4 h-4" />
-                    </>
-                  )}
-                </Button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

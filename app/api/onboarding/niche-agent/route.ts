@@ -36,7 +36,9 @@ export async function POST(req: NextRequest) {
                     streamMode: "updates",
                 });
 
-                for await (const update of await eventStream) {
+                const stream = await eventStream;
+                for await (const update of stream) {
+                    console.log("Graph Update:", JSON.stringify(update, null, 2));
                     // Extract updates from the "analyze" node or "awaitUser" node
                     if (update.analyze) {
                         const { reasoningSteps, questions, isComplete, finalNicheDescription } = update.analyze;
