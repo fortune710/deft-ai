@@ -110,7 +110,6 @@ export const step1Schema = z.object({
   question_1_niche: z
     .string()
     .min(3, 'Please enter at least 3 characters')
-    .max(200, 'Please keep it under 200 characters'),
 });
 
 export const step2Schema = z.object({
