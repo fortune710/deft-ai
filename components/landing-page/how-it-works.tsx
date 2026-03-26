@@ -15,7 +15,7 @@ const steps = [
         number: "02",
         title: "Get Your 30-Day Pipeline",
         duration: "Instant Generate",
-        description: "Deft generates a complete, cross-platform content plan with hooks, scripts, and CTAs — personalized to your voice and optimized for your platform of choice.",
+        description: "Deft generates a complete, cross-platform idea pipeline with hooks, scripts, and CTAs — personalized to your voice and optimized for your platform of choice.",
         icon: <Layout className="w-6 h-6 text-primary" />,
     },
     {
@@ -147,3 +147,4 @@ export default function HowItWorks() {
         </section>
     );
 }
+
