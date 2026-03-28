@@ -1,13 +1,15 @@
 import { AIModelConfig } from './ai-models';
+import { DetailedNiche } from './niche-agent';
 
 export interface AgentContext {
-  niche: string;
-  subNiche?: string;
-  targetAudience: string;
+  userId: string;
+  niche: DetailedNiche;
+  goal: string | null;
   platforms: string[];
-  contentPillars: string[];
-  tone?: string;
-  goals?: string[];
+  experience: string | null;
+  frequency: string | null;
+  currentAffairsEnabled?: boolean;
+  thirdPartyRuntime?: boolean; // True when running in Trigger.dev context
 }
 
 export interface ContentIdea {
@@ -16,6 +18,12 @@ export interface ContentIdea {
   title: string;
   description: string;
   contentPillar: string;
+  hook?: string;
+  isCurrentAffairs?: boolean;
+  currentAffairsReason?: string;
+  searchQueries?: string[];
+  sourceHints?: string[];
+  sourceUrls?: string[];
   engagementScore?: number;
   specificityScore?: number;
   contrarianScore?: number;
@@ -47,6 +55,14 @@ export interface GeneratedContent {
     callToAction?: string;
     visualCues?: string[];
     audioSuggestion?: string;
+    researchSummary?: string;
+    researchSources?: Array<{
+      title: string;
+      url: string;
+      favicon?: string;
+    }>;
+    isCurrentAffairs?: boolean;
+    currentAffairsReason?: string;
   };
 }
 
