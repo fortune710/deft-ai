@@ -5,7 +5,7 @@ import {
   PLATFORM_OPTIONS,
   EXPERIENCE_OPTIONS,
   FREQUENCY_OPTIONS,
-} from '@/lib/validations/onboarding';
+} from '@/lib/validations/onboarding/options';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
