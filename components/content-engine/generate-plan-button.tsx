@@ -17,7 +17,7 @@ export function GeneratePlanButton({ onClick }: GeneratePlanButtonProps) {
         className="hidden md:flex"
       >
         <Sparkles className="h-4 w-4 mr-2" />
-        Generate 30-Day Plan
+        Generate Ideas
       </Button>
 
       {/* Mobile Floating Action Button - Only visible on mobile */}

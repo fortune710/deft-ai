@@ -39,16 +39,17 @@ import {
 } from "@/components/ui/drawer";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { DetailedNiche } from '@/types/niche-mapping';
 
 interface Step1ChatAgentProps {
-    value: string;
-    onChange: (value: string) => void;
+    value: DetailedNiche | null;
+    onChange: (value: DetailedNiche) => void;
     error?: string;
 }
 
 export function Step1ChatAgent({ value, onChange, error }: Step1ChatAgentProps) {
     const isMobile = useIsMobile();
-    const [inputValue, setInputValue] = useState(value);
+    const [inputValue, setInputValue] = useState(value?.niche || '');
     const [threadId, setThreadId] = useState<string | null>(null);
     const [reasoningSteps, setReasoningSteps] = useState<NicheAgentReasoningStep[]>([]);
     const [currentQuestionSet, setCurrentQuestionSet] = useState<NicheAgentQuestion[]>([]);
@@ -56,7 +57,7 @@ export function Step1ChatAgent({ value, onChange, error }: Step1ChatAgentProps) 
     const [answers, setAnswers] = useState<Record<string, string>>({});
     const [individualAnswer, setIndividualAnswer] = useState('');
     const [isComplete, setIsComplete] = useState(false);
-    const [finalResult, setFinalResult] = useState<string | null>(null);
+    const [finalResult, setFinalResult] = useState<DetailedNiche | null>(null);
     const [isResultOpen, setIsResultOpen] = useState(false);
 
     const [flowState, setFlowState] = useState<'initial' | 'reasoning' | 'questions' | 'done'>('initial');
@@ -192,13 +193,43 @@ export function Step1ChatAgent({ value, onChange, error }: Step1ChatAgentProps) 
         ? individualAnswer.trim().length > 0
         : !!currentAnswer;
 
-    const renderMarkdown = () => (
-        <div className="prose prose-sm dark:prose-invert max-w-none pt-4 pb-8 px-2 overflow-y-auto max-h-[60vh]">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {finalResult || ''}
-            </ReactMarkdown>
-        </div>
-    );
+    const renderMarkdown = () => {
+        if (!finalResult) return null;
+        return (
+            <div className="space-y-6 pt-4 pb-8 px-2 overflow-y-auto max-h-[60vh]">
+                <div>
+                    <h4 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-2 font-lexend-deca">Niche</h4>
+                    <p className="text-foreground text-lg font-medium">{finalResult.niche}</p>
+                </div>
+                <div>
+                    <h4 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-2 font-lexend-deca">Sub-Niche</h4>
+                    <p className="text-foreground text-base">{finalResult.subNiche}</p>
+                </div>
+                <div>
+                    <h4 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-2 font-lexend-deca">Target Audience</h4>
+                    <p className="text-foreground text-base">{finalResult.targetAudience}</p>
+                </div>
+                <div>
+                    <h4 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-2 font-lexend-deca">Content Pillars</h4>
+                    <ul className="list-disc pl-5 space-y-1">
+                        {finalResult.contentPillars.map((pillar, idx) => (
+                            <li key={idx} className="text-foreground text-base">{pillar}</li>
+                        ))}
+                    </ul>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <h4 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-2 font-lexend-deca">Tone</h4>
+                        <p className="text-foreground text-base capitalize">{finalResult.tone}</p>
+                    </div>
+                    <div>
+                        <h4 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-2 font-lexend-deca">Current Affairs</h4>
+                        <p className="text-foreground text-base capitalize">{finalResult.doesCurrentAffairs}</p>
+                    </div>
+                </div>
+            </div>
+        );
+    };
 
     return (
         <div className="flex flex-col h-full w-full max-w-4xl mx-auto relative px-4 pb-12">

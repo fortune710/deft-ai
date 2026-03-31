@@ -64,7 +64,7 @@ export default function EditContentPage() {
         <div className="text-center">
           <h2 className="text-2xl font-bold mb-4">Content not found</h2>
           <Button onClick={() => router.push('/content-engine')}>
-            Back to Content Engine
+            Back to Content Ideas
           </Button>
         </div>
       </div>

@@ -22,7 +22,6 @@ import {
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import { createContentItem } from '@/lib/api/content-items';
-import { useContentPlans } from '@/hooks/use-content-plans';
 import { ContentEngineTracking } from '@/lib/posthog/track';
 
 interface AddToContentButtonProps {
@@ -32,8 +31,6 @@ interface AddToContentButtonProps {
 
 export function AddToContentButton({ sessionId, content }: AddToContentButtonProps) {
   const router = useRouter();
-  const { plans } = useContentPlans();
-  const activePlan = plans?.find((p) => p.is_active);
 
   const [showDialog, setShowDialog] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState(content.platform || 'youtube');
@@ -56,7 +53,6 @@ export function AddToContentButton({ sessionId, content }: AddToContentButtonPro
 
     try {
       const createdItem = await createContentItem({
-        plan_id: activePlan?.id || null,
         title: selectedHook.text,
         description: content.fullScript.substring(0, 200),
         platform: selectedPlatform as any,
@@ -75,15 +71,14 @@ export function AddToContentButton({ sessionId, content }: AddToContentButtonPro
         itemId: createdItem.id,
         platform: selectedPlatform,
         status: selectedStatus,
-        planId: activePlan?.id || null,
       });
 
-      toast.success('Added to Content Engine');
+      toast.success('Added to Content Ideas');
       setShowDialog(false);
       router.push('/content-engine');
     } catch (error) {
-      console.error('Error adding to content engine:', error);
-      toast.error('Failed to add to content engine');
+      console.error('Error adding to content ideas:', error);
+      toast.error('Failed to add to content ideas');
     } finally {
       setIsAdding(false);
     }
@@ -93,15 +88,15 @@ export function AddToContentButton({ sessionId, content }: AddToContentButtonPro
     <>
       <Button onClick={() => setShowDialog(true)}>
         <Plus className="h-4 w-4 mr-2" />
-        Add to Content Engine
+        Add to Content Ideas
       </Button>
 
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add to Content Engine</DialogTitle>
+            <DialogTitle>Add to Content Ideas</DialogTitle>
             <DialogDescription>
-              Add this script to your content pipeline{activePlan ? '' : ' (unscheduled)'}
+              Add this script to your idea list
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">

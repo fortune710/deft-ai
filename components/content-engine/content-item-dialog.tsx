@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import { Copy, Check } from 'lucide-react';
+import { Copy, Check, Calendar as CalendarIcon } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -15,6 +15,12 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Calendar } from '@/components/ui/calendar';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { useUpdateContentItem } from '@/hooks/use-content-items';
 import { toast } from 'sonner';
 import type { ContentItem, Platform } from '@/types/content-engine';
@@ -38,6 +44,7 @@ export function ContentItemDialog({ item, open, onOpenChange }: ContentItemDialo
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
   const [editedTitle, setEditedTitle] = useState('');
   const [editedDescription, setEditedDescription] = useState('');
+  const [scheduleOpen, setScheduleOpen] = useState(false);
 
   const updateItem = useUpdateContentItem();
 
@@ -130,6 +137,40 @@ export function ContentItemDialog({ item, open, onOpenChange }: ContentItemDialo
                 placeholder="Content description"
                 rows={2}
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Schedule Date</Label>
+              <Popover open={scheduleOpen} onOpenChange={setScheduleOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full justify-start text-left font-normal"
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {format(new Date(item.scheduled_date), 'PPP')}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={new Date(item.scheduled_date)}
+                    onSelect={(date) => {
+                      if (!date) return;
+                      updateItem.mutate(
+                        { itemId: item.id, updates: { scheduled_date: format(date, 'yyyy-MM-dd') } },
+                        {
+                          onSuccess: () => toast.success('Schedule updated'),
+                          onError: () => toast.error('Failed to update schedule'),
+                        }
+                      );
+                      setScheduleOpen(false);
+                    }}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
 
             {(editedTitle || editedDescription) && (

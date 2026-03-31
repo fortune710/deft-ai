@@ -50,7 +50,7 @@ export default function Hero() {
             >
                 <Image
                     src="/hero-image.png"
-                    alt='Deft Content Engine Page'
+                    alt='Deft Content Ideas Page'
                     width={1200}
                     height={800}
                     className='w-full rounded-2xl shadow-2xl border border-primary/10'

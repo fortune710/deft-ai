@@ -5,7 +5,7 @@ import {
   PLATFORM_OPTIONS,
   EXPERIENCE_OPTIONS,
   FREQUENCY_OPTIONS,
-} from '@/lib/validations/onboarding';
+} from '@/lib/validations/onboarding/options';
 
 export function createGeminiClient() {
   const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;

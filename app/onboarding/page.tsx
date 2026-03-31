@@ -15,30 +15,18 @@ import { Button } from '@/components/ui/button';
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const [isSuccess, setIsSuccess] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
 
   const handleComplete = async (data: OnboardingFormData) => {
-    setIsGenerating(true);
     setError(null);
 
     try {
-      console.log('Starting AI context generation...');
-      const aiContext = await generateAIContextClient(data);
-      console.log('AI context generated:', aiContext);
-
-      console.log('Building system prompt...');
-      const systemPrompt = buildSystemPrompt(data, aiContext);
-      console.log('System prompt built');
-
       console.log('Saving content profile...');
-      const result = await saveContentProfile(data, aiContext, systemPrompt);
+      const result = await saveContentProfile(data);
       console.log('Save result:', result);
 
       if (result.success) {
-        setIsSuccess(true);
         setTimeout(() => {
           router.push('/content-engine');
         }, 2000);
@@ -49,7 +37,6 @@ export default function OnboardingPage() {
       console.error('Error in handleComplete:', error);
       const errorMessage = error?.message || 'An unexpected error occurred. Please try again.';
       setError(errorMessage);
-      setIsGenerating(false);
     }
   };
 
@@ -57,48 +44,6 @@ export default function OnboardingPage() {
     setError(null);
   };
 
-  if (isGenerating) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-6">
-        <Card className="max-w-2xl w-full">
-          <CardHeader className="text-center space-y-6 py-12">
-            <div className="flex justify-center">
-              <Loader2 className="w-16 h-16 animate-spin text-primary" />
-            </div>
-            <div className="space-y-2">
-              <CardTitle className="text-3xl">Generating Your Content Strategy</CardTitle>
-              <CardDescription className="text-base">
-                AI is analyzing your responses and creating a personalized content plan.
-                This may take a moment...
-              </CardDescription>
-            </div>
-          </CardHeader>
-        </Card>
-      </div>
-    );
-  }
-
-  if (isSuccess) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-6">
-        <Card className="max-w-2xl w-full">
-          <CardHeader className="text-center space-y-6 py-12">
-            <div className="flex justify-center">
-              <CheckCircle2 className="w-16 h-16 text-green-500" />
-            </div>
-            <div className="space-y-2">
-              <CardTitle className="text-3xl">Your Content Engine is Ready</CardTitle>
-              <CardDescription className="text-base">
-                We've analyzed your niche and created a personalized content strategy
-                just for you.
-              </CardDescription>
-            </div>
-            <p className="text-sm text-muted-foreground">Redirecting to Content Engine...</p>
-          </CardHeader>
-        </Card>
-      </div>
-    );
-  }
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-background">
@@ -137,22 +82,6 @@ export default function OnboardingPage() {
       </div>
 
       <div className="relative z-10 h-full min-h-screen flex flex-col pb-12">
-        {/* <div className="text-center space-y-6 pt-16 px-6 max-w-5xl mx-auto w-full">
-          <div className="flex justify-center">
-            <div className="p-3 rounded-2xl bg-primary/10 border border-primary/20 backdrop-blur-xl animate-pulse">
-              <Sparkles className="w-10 h-10 text-primary" />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <h1 className="text-5xl font-bold tracking-tight bg-gradient-to-b from-foreground to-foreground/60 bg-clip-text text-transparent">
-              Discover Your Creator DNA
-            </h1>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto font-medium">
-              Our AI reasoning engine will help you map out your unique niche and strategy.
-            </p>
-          </div>
-        </div> */}
-
         {error && (
           <div className="max-w-5xl mx-auto w-full px-6 mt-12">
             <Alert variant="destructive">

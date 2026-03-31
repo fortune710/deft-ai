@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { format } from 'date-fns';
@@ -23,21 +23,17 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { createContentPlanSchema } from '@/lib/validations/content-engine';
-import { useCreatePlan } from '@/hooks/use-content-plans';
-import { useBatchCreateContentItems } from '@/hooks/use-content-items';
-import { useGenerateContentPlan } from '@/hooks/use-generate-content-plan';
 import { useContentProfile } from '@/hooks/use-content-profile';
 import { useContentEngineProgress } from '@/hooks/use-content-engine-progress';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { Platform } from '@/types/content-engine';
 import { z } from 'zod';
-import { useEffect } from 'react';
 
 interface GeneratePlanDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSuccess: (planId: string) => void;
+  onSuccess: () => void;
 }
 
 const platformOptions: { value: Platform; label: string }[] = [
@@ -62,31 +58,28 @@ export function GeneratePlanDialog({ open, onOpenChange, onSuccess }: GeneratePl
   // Handle completion when progress is deleted
   useEffect(() => {
     if (isGenerating && !isGeneratingFromProgress && progress === null) {
-      // Generation completed, refresh plans and close dialog
-      queryClient.invalidateQueries({ queryKey: ['content-plans'] });
-      queryClient.invalidateQueries({ queryKey: ['content-plans', 'active'] });
+      // Generation completed, refresh items and close dialog
       queryClient.invalidateQueries({ queryKey: ['content-items'] });
       setIsGenerating(false);
       // Small delay to show success message
       setTimeout(() => {
-        toast.success('Content plan created successfully!');
+        toast.success('Content ideas created successfully!');
         onOpenChange(false);
+        onSuccess();
       }, 500);
     }
-  }, [isGenerating, isGeneratingFromProgress, progress, queryClient, onOpenChange]);
+  }, [isGenerating, isGeneratingFromProgress, progress, queryClient, onOpenChange, onSuccess]);
 
   const currentProgress = progress?.progress || 0;
-  const progressMessage = progress?.message || 'Generating your plan…';
+  const progressMessage = progress?.message || 'Generating your ideas…';
 
   const friendlyStatus = useMemo(() => {
     if (!isGenerating && !isGeneratingFromProgress) return '';
-
-    // Keep these intentionally vague and user-friendly (no agents, no workflow disclosure).
     if (currentProgress < 20) return 'Getting things ready…';
     if (currentProgress < 45) return 'Generating ideas tailored to you…';
-    if (currentProgress < 70) return 'Shaping your 30-day plan…';
-    if (currentProgress < 90) return 'Polishing details and spacing posts…';
-    return 'Saving your plan…';
+    if (currentProgress < 70) return 'Drafting scripts and hooks…';
+    if (currentProgress < 90) return 'Polishing details and pacing…';
+    return 'Saving your ideas…';
   }, [isGenerating, isGeneratingFromProgress, currentProgress]);
 
   const {
@@ -98,7 +91,7 @@ export function GeneratePlanDialog({ open, onOpenChange, onSuccess }: GeneratePl
   } = useForm<FormData>({
     resolver: zodResolver(createContentPlanSchema),
     defaultValues: {
-      title: `Content Plan - ${format(new Date(), 'MMMM yyyy')}`,
+      title: `Content Ideas - ${format(new Date(), 'MMMM yyyy')}`,
       start_date: new Date(),
       platforms: profile?.question_3_platforms?.map((p: any) => p.name as Platform) || [],
     },
@@ -143,7 +136,7 @@ export function GeneratePlanDialog({ open, onOpenChange, onSuccess }: GeneratePl
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          planName: data.title || `Content Plan - ${format(data.start_date, 'MMMM yyyy')}`,
+          batchName: data.title || `Content Ideas - ${format(data.start_date, 'MMMM yyyy')}`,
           platforms: data.platforms,
         }),
       });
@@ -152,12 +145,9 @@ export function GeneratePlanDialog({ open, onOpenChange, onSuccess }: GeneratePl
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || 'Failed to start content generation');
       }
-
-      // The progress will be updated via realtime subscription
-      // We'll monitor the progress state and handle completion
     } catch (error: any) {
-      console.error('Error generating plan:', error);
-      toast.error(error?.message || 'Failed to generate content plan');
+      console.error('Error generating ideas:', error);
+      toast.error(error?.message || 'Failed to generate content ideas');
       setIsGenerating(false);
     }
   };
@@ -168,10 +158,10 @@ export function GeneratePlanDialog({ open, onOpenChange, onSuccess }: GeneratePl
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-yellow-500" />
-            Generate 30-Day Content Plan
+            Generate Content Ideas
           </DialogTitle>
           <DialogDescription>
-            AI will create a complete 30-day content calendar based on your profile and preferences.
+            AI will create a fresh batch of ideas and scripts based on your profile and preferences.
           </DialogDescription>
         </DialogHeader>
 
@@ -200,11 +190,11 @@ export function GeneratePlanDialog({ open, onOpenChange, onSuccess }: GeneratePl
         ) : (
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="title">Plan Title (Optional)</Label>
+              <Label htmlFor="title">Idea Batch Title (Optional)</Label>
               <Input
                 id="title"
                 {...register('title')}
-                placeholder={`Content Plan - ${format(new Date(), 'MMMM yyyy')}`}
+                placeholder={`Content Ideas - ${format(new Date(), 'MMMM yyyy')}`}
               />
               {errors.title && (
                 <p className="text-sm text-red-600">{errors.title.message}</p>
@@ -269,7 +259,7 @@ export function GeneratePlanDialog({ open, onOpenChange, onSuccess }: GeneratePl
 
             {selectedPlatforms.length > 0 && profile?.question_5_frequency && (
               <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 space-y-2">
-                <p className="text-sm font-semibold">Plan Preview</p>
+                <p className="text-sm font-semibold">Ideas Preview</p>
                 <div className="text-sm text-gray-700 dark:text-gray-300 space-y-1">
                   <p>
                     Duration: <strong>30 days</strong>
@@ -299,7 +289,7 @@ export function GeneratePlanDialog({ open, onOpenChange, onSuccess }: GeneratePl
                 disabled={selectedPlatforms.length === 0}
               >
                 <Sparkles className="mr-2 h-4 w-4" />
-                Generate Plan
+                Generate Ideas
               </Button>
             </div>
           </form>

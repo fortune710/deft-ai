@@ -1,14 +1,14 @@
+import { z } from "zod";
+import { detailedNicheSchema } from "@/lib/validations/onboarding/niche";
+import { nicheAgentQuestionSchema } from "@/lib/validations/onboarding/niche";
+
+
 export interface NicheAgentOption {
     label: string;
     value: string;
 }
 
-export interface NicheAgentQuestion {
-    id: string;
-    content: string;
-    options: NicheAgentOption[];
-    allowCustom?: boolean;
-}
+export type NicheAgentQuestion = z.infer<typeof nicheAgentQuestionSchema>;
 
 export interface NicheAgentQuestionSet {
     questions: NicheAgentQuestion[];
@@ -19,8 +19,10 @@ export interface NicheAgentReasoningStep {
     id: string;
 }
 
+export type DetailedNiche = z.infer<typeof detailedNicheSchema>;
+
 export interface NicheAgentFinalResult {
-    detailedNiche: string;
+    detailedNiche: DetailedNiche;
     reasoningSummary: string;
 }
 

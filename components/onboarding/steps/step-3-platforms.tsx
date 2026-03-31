@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { PLATFORM_OPTIONS } from '@/lib/validations/onboarding';
+import { PLATFORM_OPTIONS } from '@/lib/validations/onboarding/options';
 import { Platform } from '@/types/niche-mapping';
 import { Music, Instagram, Youtube, Twitter, Linkedin } from 'lucide-react';
 import { cn } from '@/lib/utils';

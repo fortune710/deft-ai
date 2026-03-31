@@ -1,35 +1,41 @@
 //import { revalidatePath } from 'next/cache';
 import { supabase } from '@/lib/supabase/client';
 import { OnboardingFormData } from '@/types/niche-mapping';
-import { completeOnboardingSchema } from '@/lib/validations/onboarding';
+import { completeOnboardingSchema } from '@/lib/validations/onboarding/questions';
+import { TABLES } from '@/lib/supabase/constants';
+import { logger } from '@/lib/logger';
 
-export async function saveContentProfile(
-  data: OnboardingFormData,
-  aiContext: any,
-  systemPrompt: string
-) {
+const log = logger.child({ module: 'onboarding' });
+
+export async function saveContentProfile(data: OnboardingFormData) {
   try {
-    console.log('Validating data...');
     const validatedData = completeOnboardingSchema.parse(data);
 
-    console.log('Getting user from session...');
     const {
       data: { user },
       error: userError,
     } = await supabase.auth.getUser();
 
-    console.log('User:', user ? 'Found' : 'Not found');
     if (userError) {
-      console.error('Error getting user:', userError);
+      log.error('Error getting user:', {
+        statusCode: userError.status,
+        message: userError.message,
+
+      });
+      return { success: false, error: 'Error getting user', profile: null };
     }
 
     if (!user) {
       throw new Error('Not authenticated. Please sign in again.');
     }
 
-    console.log('Inserting profile for user:', user.id);
+    log.info('Inserting profile for user:', {
+      userId: user.id,
+      data: validatedData,
+      action: "supabase_upsert"
+    });
     const { data: profile, error } = await supabase
-      .from('user_content_profile')
+      .from(TABLES.USER_CONTENT_PROFILE)
       .upsert(
         {
           user_id: user.id,
@@ -38,8 +44,6 @@ export async function saveContentProfile(
           question_3_platforms: validatedData.question_3_platforms,
           question_4_experience: validatedData.question_4_experience,
           question_5_frequency: validatedData.question_5_frequency,
-          ai_context: aiContext,
-          system_prompt: systemPrompt,
           completed_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         },
@@ -51,7 +55,11 @@ export async function saveContentProfile(
       .single();
 
     if (error) {
-      console.error('Error upserting profile:', error);
+      log.error('Error upserting profile:', {
+        userId: user.id,
+        error: error.message,
+        error_code: error.code
+      });
       throw error;
     }
 
@@ -103,7 +111,7 @@ export async function getContentProfile() {
   }
 }
 
-export async function updateAIContext(aiContext: any, systemPrompt: string) {
+export async function updateAIContext(aiStrategy: any) {
   try {
 
     const {
@@ -117,8 +125,7 @@ export async function updateAIContext(aiContext: any, systemPrompt: string) {
     const { error: updateError } = await supabase
       .from('user_content_profile')
       .update({
-        ai_context: aiContext,
-        system_prompt: systemPrompt,
+        question_1_niche: aiStrategy,
         updated_at: new Date().toISOString(),
       })
       .eq('user_id', user.id);
@@ -131,7 +138,7 @@ export async function updateAIContext(aiContext: any, systemPrompt: string) {
 
     return { success: true };
   } catch (error: any) {
-    console.error('Error updating AI context:', error);
+    console.error('Error updating AI strategy:', error);
     return {
       success: false,
       error: error.message || 'Failed to update AI strategy',

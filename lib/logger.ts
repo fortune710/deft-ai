@@ -1,108 +1,94 @@
+import pino, { Logger as PinoLogger } from "pino";
+import { logger as triggerLogger } from "@trigger.dev/sdk/v3";
+
+const isProduction = process.env.NODE_ENV === "production";
+
 /**
- * Simple structured logger for the application
- * Provides consistent logging with context, timestamps, and log levels
+ * Configure Pino for standard environments (Next.js server/API)
  */
+const rootPino = isProduction
+  ? pino({
+    level: "info",
+    base: { env: process.env.NODE_ENV },
+    // Minimal properties for structured logging
+    timestamp: pino.stdTimeFunctions.isoTime,
+  })
+  : pino({
+    transport: {
+      target: "pino-pretty",
+      options: {
+        colorize: true,
+        ignore: 'pid,hostname',
+      },
+    },
+    level: "debug",
+  });
 
-type LogLevel = 'debug' | 'info' | 'warn' | 'error';
-
-interface LogContext {
-  [key: string]: unknown;
+export interface AppLogger {
+  info: (msg: string, data?: any, thirdPartyRuntime?: boolean) => void;
+  warn: (msg: string, data?: any, thirdPartyRuntime?: boolean) => void;
+  error: (msg: string, data?: any, thirdPartyRuntime?: boolean) => void;
+  debug: (msg: string, data?: any, thirdPartyRuntime?: boolean) => void;
+  phase: (phase: string, message: string, thirdPartyRuntime?: boolean) => void;
+  child: (bindings: any) => AppLogger;
 }
 
-class Logger {
-  private isDevelopment: boolean;
-
-  constructor() {
-    this.isDevelopment = process.env.NODE_ENV === 'development';
-  }
-
-  private formatMessage(level: LogLevel, message: string, context?: LogContext): string {
-    const timestamp = new Date().toISOString();
-    const contextStr = context ? ` ${JSON.stringify(context)}` : '';
-    return `[${timestamp}] [${level.toUpperCase()}] ${message}${contextStr}`;
-  }
-
-  private log(level: LogLevel, message: string, context?: LogContext): void {
-    const formattedMessage = this.formatMessage(level, message, context);
-
-    switch (level) {
-      case 'debug':
-        if (this.isDevelopment) {
-          console.debug(formattedMessage);
+/**
+ * Factory to create a logger instance that handles both Pino and Trigger.dev
+ */
+const createLoggerInstance = (pino: PinoLogger, bindings: any = {}): AppLogger => {
+  return {
+    info: (msg, data, thirdPartyRuntime = false) => {
+      const mergedData = { ...bindings, ...data };
+      if (thirdPartyRuntime) {
+        triggerLogger.info(msg, mergedData);
+      } else {
+        pino.info(mergedData, msg);
+      }
+    },
+    warn: (msg, data, thirdPartyRuntime = false) => {
+      const mergedData = { ...bindings, ...data };
+      if (thirdPartyRuntime) {
+        triggerLogger.warn(msg, mergedData);
+      } else {
+        pino.warn(mergedData, msg);
+      }
+    },
+    error: (msg, data, thirdPartyRuntime = false) => {
+      const mergedData = { ...bindings, ...data };
+      if (thirdPartyRuntime) {
+        triggerLogger.error(msg, mergedData);
+      } else {
+        pino.error(mergedData, msg);
+      }
+    },
+    debug: (msg, data, thirdPartyRuntime = false) => {
+      const mergedData = { ...bindings, ...data };
+      if (thirdPartyRuntime) {
+        // Trigger.dev v3 doesn't have .debug explicitly in some versions, fallback to .log
+        if (typeof (triggerLogger as any).debug === 'function') {
+          (triggerLogger as any).debug(msg, mergedData);
+        } else {
+          triggerLogger.log(msg, mergedData);
         }
-        break;
-      case 'info':
-        console.log(formattedMessage);
-        break;
-      case 'warn':
-        console.warn(formattedMessage);
-        break;
-      case 'error':
-        console.error(formattedMessage);
-        break;
-    }
-  }
+      } else {
+        pino.debug(mergedData, msg);
+      }
+    },
+    phase: (phase, message, thirdPartyRuntime = false) => {
+      const formatted = `>>> [${phase.toUpperCase()}] ${message}`;
+      const mergedData = { ...bindings, phase };
+      if (thirdPartyRuntime) {
+        triggerLogger.log(formatted, mergedData);
+      } else {
+        pino.info(mergedData, formatted);
+      }
+    },
+    child: (newBindings) => createLoggerInstance(pino.child(newBindings), { ...bindings, ...newBindings }),
+  };
+};
 
-  /**
-   * Log debug messages (only in development)
-   */
-  debug(message: string, context?: LogContext): void {
-    this.log('debug', message, context);
-  }
-
-  /**
-   * Log informational messages
-   */
-  info(message: string, context?: LogContext): void {
-    this.log('info', message, context);
-  }
-
-  /**
-   * Log warning messages
-   */
-  warn(message: string, context?: LogContext): void {
-    this.log('warn', message, context);
-  }
-
-  /**
-   * Log error messages
-   */
-  error(message: string, error?: Error | unknown, context?: LogContext): void {
-    const errorContext: LogContext = {
-      ...context,
-    };
-
-    if (error instanceof Error) {
-      errorContext.error = {
-        name: error.name,
-        message: error.message,
-        stack: this.isDevelopment ? error.stack : undefined,
-      };
-    } else if (error) {
-      errorContext.error = error;
-    }
-
-    this.log('error', message, errorContext);
-  }
-
-  /**
-   * Create a child logger with additional context
-   */
-  child(context: LogContext): Logger {
-    const childLogger = new Logger();
-    const originalLog = childLogger.log.bind(childLogger);
-    
-    childLogger.log = (level: LogLevel, message: string, childContext?: LogContext) => {
-      originalLog(level, message, { ...context, ...childContext });
-    };
-
-    return childLogger;
-  }
-}
-
-// Export singleton instance
-export const logger = new Logger();
-
-// Export Logger class for creating custom instances
-export { Logger };
-export type { LogLevel, LogContext };
+/**
+ * Unified logger utility with support for structured logging, child loggers, and Trigger.dev.
+ */
+export const logger = createLoggerInstance(rootPino);

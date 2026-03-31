@@ -9,10 +9,11 @@ interface IdeaGenerationConfig {
   count: number;
   strategy: 'contrarian' | 'results' | 'pain_point' | 'transformation';
   contentPillars: string[];
+  currentAffairsBriefing?: string;
 }
 
 export function buildIdeaGenerationPrompt(config: IdeaGenerationConfig): string {
-  const { niche, subNiche, targetAudience, platform, count, strategy, contentPillars } = config;
+  const { niche, subNiche, targetAudience, platform, count, strategy, contentPillars, currentAffairsBriefing } = config;
 
   const platformContext = buildPlatformContext(platform);
   const engagementStrategy = getEngagementStrategy(platform);
@@ -22,159 +23,125 @@ export function buildIdeaGenerationPrompt(config: IdeaGenerationConfig): string 
   switch (strategy) {
     case 'contrarian':
       strategyPrompt = `
-STRATEGY: CONTRARIAN ANGLES
-
-Generate ideas that challenge conventional wisdom in ${niche}. Each idea should:
+<strategy type="contrarian">
+Generate ideas that challenge conventional wisdom in ${niche}. 
 - Directly contradict common advice or practices
 - Be backed by logic, data, or personal experience
 - Create cognitive dissonance that stops scrolling
 - Avoid being contrarian just for shock value
 
-Examples of contrarian angles:
-${getContrarianAngle().examples.map(ex => `- ${ex}`).join('\n')}
+Examples:
+${getContrarianAngle().examples.map(ex => `<example>${ex}</example>`).join('\n')}
 
-Your ideas should make people think: "Wait, that goes against everything I've heard..."
-      `;
+Goal: Make people think "Wait, that goes against everything I've heard..."
+</strategy>`;
       break;
 
     case 'results':
       strategyPrompt = `
-STRATEGY: RESULTS-FOCUSED
-
-Generate ideas focused on specific, measurable outcomes. Each idea MUST include:
-- Specific numbers (time, money, metrics)
-- Before and after states
-- Exact timeframe
-- Tangible results
+<strategy type="results-focused">
+Generate ideas focused on specific, measurable outcomes.
+- Include specific numbers (time, money, metrics)
+- Detail before and after states
+- Define exact timeframe
+- Highlight tangible results
 
 Avoid vague terms like "boost", "grow", "improve", "increase" without numbers.
+<example type="good">How I grew from 0 to 10K followers in 47 days</example>
+<example type="bad">How to grow your following quickly</example>
+<example type="good">The $3K course vs the free method that got me $15K/month</example>
+<example type="bad">How to make money with your skills</example>
 
-Good: "How I grew from 0 to 10K followers in 47 days"
-Bad: "How to grow your following quickly"
-
-Good: "The $3K course vs the free method that got me $15K/month"
-Bad: "How to make money with your skills"
-
-Results framing templates:
+Framing templates:
 ${RESULTS_FOCUSED_FRAMING.map(rf => `- ${rf.template}`).join('\n')}
-      `;
+</strategy>`;
       break;
 
     case 'pain_point':
       strategyPrompt = `
-STRATEGY: PAIN POINT TARGETING
-
-Generate ideas that directly address specific struggles of ${targetAudience}. Each idea should:
+<strategy type="pain-point">
+Generate ideas that directly address specific struggles of ${targetAudience}.
 - Call out a specific, relatable frustration
 - Show you understand their exact situation
 - Promise a concrete solution
 - Create "This is exactly what I needed!" moment
 
-Focus on pain points like:
+Focus areas:
 - Wasting time on tactics that don't work
 - Feeling overwhelmed by conflicting advice
 - Struggling with specific technical challenges
 - Seeing others succeed while they're stuck
 - Making common mistakes without realizing
-
-Your ideas should make them think: "How did you know I struggle with this?"
-      `;
+</strategy>`;
       break;
 
     case 'transformation':
       strategyPrompt = `
-STRATEGY: TRANSFORMATION STORIES
-
-Generate ideas showcasing dramatic before/after journeys. Each idea should:
+<strategy type="transformation">
+Generate ideas showcasing dramatic before/after journeys.
 - Show clear starting point (often negative)
 - Describe dramatic transformation
 - Hint at the "how" to create curiosity
 - Use specific timeframes and outcomes
 
-Transformation angles:
+Angles:
 - Failed approach → Successful approach
 - Struggling creator → Thriving creator
 - Old inefficient method → New streamlined method
 - Before knowledge → After knowledge
 - Previous results → Current results
-
-Make the transformation aspirational but believable.
-      `;
+</strategy>`;
       break;
   }
 
   return `
+<context>
 You are an expert content strategist specializing in ${niche} content for ${targetAudience}.
+Your task is to generate exactly ${count} highly engaging, scroll-stopping content ideas.
 
 ${platformContext}
+</context>
 
-NICHE CONTEXT:
+<niche_details>
 Primary Niche: ${niche}
 ${subNiche ? `Sub-Niche: ${subNiche}` : ''}
 Target Audience: ${targetAudience}
 
-CONTENT PILLARS TO COVER:
+Content Pillars to Cover:
 ${contentPillars.map((pillar, i) => `${i + 1}. ${pillar}`).join('\n')}
+</niche_details>
+
+${currentAffairsBriefing ? `<current_affairs_briefing>
+${currentAffairsBriefing}
+</current_affairs_briefing>` : ''}
 
 ${strategyPrompt}
 
-PLATFORM-SPECIFIC REQUIREMENTS FOR ${platform.toUpperCase()}:
-
+<platform_requirements platform="${platform.toUpperCase()}">
 Scroll-Stopping Techniques:
 ${engagementStrategy.scrollStopTechniques.map((tech, i) => `${i + 1}. ${tech}`).join('\n')}
 
 Hook Types to Use:
 ${engagementStrategy.hooks.map((hook, i) => `${i + 1}. ${hook.type}: ${hook.template}`).join('\n')}
+</platform_requirements>
 
-MANDATORY REQUIREMENTS:
+<mandatory_rules>
+1. SPECIFICITY: Every idea must be specific, not generic.
+   YES: "The 3-tweet thread template that got me 10K followers in 30 days"
+   NO: "How to grow your audience"
 
-1. SPECIFICITY: Every idea must be specific, not generic
-   ❌ Bad: "How to grow your audience"
-   ✅ Good: "The 3-tweet thread template that got me 10K followers in 30 days"
+2. NO GENERIC ADVICE: Avoid empty phrases like "Tips and tricks", "Boost your...", "Grow your...", "Master..." unless followed by specific numbers.
 
-2. NO GENERIC ADVICE: Avoid phrases like:
-   - "Tips and tricks"
-   - "Boost your [thing]"
-   - "Grow your [thing]"
-   - "Master [thing]"
-   - "Ultimate guide to [thing]"
-   Unless followed by specific numbers or unique angles.
+3. ENGAGEMENT POTENTIAL: Ideas must naturally drive comments, saves, or shares.
 
-3. ENGAGEMENT POTENTIAL: Each idea should naturally drive:
-   - Comments (controversial or question-based)
-   - Saves (valuable reference)
-   - Shares (makes sharer look smart)
+4. CURRENT AFFAIRS:
+   - If using the CURRENT AFFAIRS BRIEFING, set "isCurrentAffairs" to true.
+   - Include 1-3 fact-based "sourceHints".
+   - Include matching "sourceUrls".
+   - If not relevant, set "isCurrentAffairs" to false.
 
-4. CONTENT PILLAR BALANCE: Distribute ideas across all pillars
-
-5. TARGET AUDIENCE RESONANCE: Use language and concerns specific to ${targetAudience}
-
-OUTPUT FORMAT:
-
-Generate exactly ${count} content ideas. For each idea, provide:
-
-{
-  "title": "Compelling title that stops scroll",
-  "description": "2-3 sentence description of what the content will cover",
-  "contentPillar": "Which pillar this falls under",
-  "hook": "The opening line/hook",
-  "platform": "${platform}"
-}
-
-Return ONLY a valid JSON array of ${count} ideas. No markdown, no explanations, just the JSON array.
-
-Example output format:
-[
-  {
-    "title": "I spent $5K on courses. This free method worked better.",
-    "description": "Breakdown of the expensive courses I bought vs the free YouTube/article method that actually got me results. Includes specific ROI comparison and exact resources.",
-    "contentPillar": "Education/Learning",
-    "hook": "Everyone says invest in yourself. I did. $5K later, I was still stuck. Then I found this:",
-    "platform": "${platform}"
-  }
-]
-
-Generate ${count} scroll-stopping, engagement-driving ideas NOW:
+5. OUTPUT: Provide EXACTLY ${count} ideas matching the expected structure.
+</mandatory_rules>
   `.trim();
 }
 
@@ -189,78 +156,63 @@ export function buildBulkIdeaGenerationPrompt(
   const platformDistribution = distributePlatformIdeas(platforms, totalIdeas);
 
   return `
-You are an expert content strategist creating scroll-stopping content ideas for ${targetAudience} in the ${niche} niche.
+<context>
+You are an elite content strategist creating scroll-stopping content ideas for ${targetAudience} in the ${niche} niche.
+Your objective is to generate exactly ${totalIdeas} highly engaging, platform-optimized content ideas that would immediately stop scrolling and drive massive engagement.
+</context>
 
-OBJECTIVE: Generate ${totalIdeas} highly engaging, platform-optimized content ideas that would immediately stop scrolling and drive massive engagement.
+<niche_details>
+Primary Niche: ${niche}
+${subNiche ? `Sub-Niche: ${subNiche}` : ''}
+Target Audience: ${targetAudience}
 
-NICHE CONTEXT:
-- Primary Niche: ${niche}
-${subNiche ? `- Sub-Niche: ${subNiche}` : ''}
-- Target Audience: ${targetAudience}
-
-CONTENT PILLARS:
+Content Pillars:
 ${contentPillars.map((pillar, i) => `${i + 1}. ${pillar}`).join('\n')}
+</niche_details>
 
-PLATFORM DISTRIBUTION:
+<platform_distribution>
 ${Object.entries(platformDistribution).map(([platform, count]) => `- ${platform}: ${count} ideas`).join('\n')}
+</platform_distribution>
 
-MANDATORY REQUIREMENTS:
+<mandatory_rules>
+1. SCROLL-STOPPING: Every idea must have a hook that stops mid-scroll.
+2. CONTRARIAN: Challenge common beliefs (respectfully).
+3. SPECIFIC: Use numbers, timeframes, specific examples (never vague).
+4. RESULTS-FOCUSED: Show tangible outcomes.
+5. NO GENERIC ADVICE: Avoid "tips", "boost", "grow" without specific context.
+6. OUTPUT: Provide EXACTLY ${totalIdeas} ideas.
+</mandatory_rules>
 
-1. SCROLL-STOPPING: Every idea must have a hook that stops mid-scroll
-2. CONTRARIAN: Challenge common beliefs (respectfully)
-3. SPECIFIC: Use numbers, timeframes, specific examples (never vague)
-4. RESULTS-FOCUSED: Show tangible outcomes
-5. NO GENERIC ADVICE: Avoid "tips", "boost", "grow" without specific context
-
-IDEA GENERATION STRATEGIES:
-
+<generation_strategies>
 Use a mix of these proven approaches:
 
 A. CONTRARIAN ANGLES (${Math.floor(totalIdeas * 0.25)} ideas)
-   - Challenge conventional wisdom
-   - "Everyone says X, but here's why that's wrong"
+   - Challenge conventional wisdom ("Everyone says X, but here's why that's wrong")
    - Expose myths with data/experience
 
 B. RESULTS-FOCUSED (${Math.floor(totalIdeas * 0.25)} ideas)
-   - Specific transformations with numbers
-   - "From X to Y in Z timeframe"
+   - Specific transformations with numbers ("From X to Y in Z timeframe")
    - Cost vs return comparisons
 
 C. PAIN POINT ADDRESSING (${Math.floor(totalIdeas * 0.25)} ideas)
-   - Call out specific struggles
-   - "If you're struggling with X, here's why"
+   - Call out specific struggles ("If you're struggling with X, here's why")
    - Solve a real, specific problem
 
 D. TRANSFORMATION STORIES (${Math.floor(totalIdeas * 0.25)} ideas)
    - Before/after narratives
    - Failed method vs successful method
-   - What changed everything
+</generation_strategies>
 
-QUALITY STANDARDS:
-
-Each idea must score high on:
+<quality_standards>
+Each idea MUST score high on:
 - Engagement potential (will people comment/share?)
 - Specificity (is it concrete or vague?)
 - Contrarian factor (does it challenge norms?)
 - Results focus (are outcomes measurable?)
-- Platform fit (optimized for the platform?)
+- Platform fit (optimized for the specific platform format?)
+</quality_standards>
 
-OUTPUT FORMAT:
-
-Return a JSON array of exactly ${totalIdeas} content ideas:
-
-[
-  {
-    "title": "Scroll-stopping title with specific hook",
-    "description": "2-3 sentences explaining the content value",
-    "contentPillar": "Which pillar it falls under",
-    "hook": "The opening line that stops scrolling",
-    "platform": "platform name"
-  }
-]
-
-EXAMPLES OF GREAT IDEAS:
-
+<examples>
 ❌ Bad: "5 tips to grow on Instagram"
 ✅ Good: "I tested 47 Reel formats in 30 days. These 3 got me from 0 to 50K followers."
 
@@ -269,8 +221,7 @@ EXAMPLES OF GREAT IDEAS:
 
 ❌ Bad: "Learn to master [skill]"
 ✅ Good: "Spent $5K on courses learning [skill]. This free method got better results in 1/10th the time."
-
-Now generate ${totalIdeas} platform-optimized, scroll-stopping content ideas as a valid JSON array:
+</examples>
   `.trim();
 }
 

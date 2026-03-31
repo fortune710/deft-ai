@@ -1,7 +1,10 @@
 import { Annotation, StateGraph, START, END, interrupt } from "@langchain/langgraph";
-import { ChatXAI } from "@langchain/xai";
-import { z } from "zod";
-import { NicheAgentQuestion } from "@/types/niche-agent";
+import { getModel } from "../models/get-model";
+import { AI_MODELS } from "@/types/ai-models";
+import { DetailedNiche, NicheAgentQuestion } from "@/types/niche-agent";
+import { analysisSchema } from "@/lib/validations/onboarding/agent";
+
+
 
 // Define the state schema
 export const NicheAgentState = Annotation.Root({
@@ -22,7 +25,7 @@ export const NicheAgentState = Annotation.Root({
         reducer: (left, right) => right,
         default: () => 0,
     }),
-    finalNicheDescription: Annotation<string | null>({
+    finalNicheDescription: Annotation<DetailedNiche | null>({
         reducer: (left, right) => right,
         default: () => null,
     }),
@@ -33,28 +36,7 @@ export const NicheAgentState = Annotation.Root({
 });
 
 // Create the model
-const model = new ChatXAI({
-    model: "grok-4-fast-reasoning",
-    maxRetries: 3,
-    apiKey: process.env.XAI_API_KEY,
-});
-
-// Schema for the agent's decision/analysis
-const analysisSchema = z.object({
-    reasoningSteps: z.array(z.string()).describe("A few steps of reasoning about the niche."),
-    isComplete: z.boolean().describe("Whether we have enough information to describe the niche in detail."),
-    questions: z.array(z.object({
-        id: z.string(),
-        content: z.string(),
-        options: z.array(z.object({
-            label: z.string(),
-            value: z.string(),
-        })),
-        allowCustom: z.boolean().describe("Whether to allow a custom answer."),
-    })).describe("Questions to ask the user if isComplete is false. An empty array if isComplete is true."),
-    finalDescription: z.string().nullable().describe("The detailed niche description if isComplete is true. Otherwise null."),
-});
-
+const model = getModel(AI_MODELS.GROK_REASONING);
 const structuredModel = model.withStructuredOutput(analysisSchema);
 
 // Node: Analyze the niche and decide next steps
@@ -121,3 +103,4 @@ export const nicheDiscoveryWorkflow = new StateGraph(NicheAgentState)
     .addEdge("awaitUser", "analyze");
 
 export const graph = nicheDiscoveryWorkflow.compile();
+

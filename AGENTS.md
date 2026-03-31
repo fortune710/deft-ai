@@ -1,0 +1,4 @@
+## Instructions for Coding Agents
+1. In every function you create or edit, add structured logging using the logging utility in lib/logger.ts. Make sure to create a logger child first to indicate what file your are working in. Make sure to inlude the `userId` in every structured log you create for better debugging. If status codes are available, include them in the log. The log must include the `action` that is being performed and error messages as well. If there are any other data that you think would be useful for debugging, include it in the log. There is an example of how i implemented structured logging in `actions/onboarding.ts`.
+2. DO NOT use `console.log` or `console.error` in your code. Use the logging utility instead.
+3. DO NOT type tables names in raw strings for Supabase calls Always use the `TABLES` enum from `lib/supabase/constants.ts`.

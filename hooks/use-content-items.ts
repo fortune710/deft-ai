@@ -23,31 +23,27 @@ export function useContentItem(itemId: string | null) {
   });
 }
 
-export function useContentItems(planId: string | null) {
+export function useContentItems() {
   return useQuery({
-    queryKey: ['content-items', planId],
-    queryFn: () => (planId ? fetchContentItems(planId) : []),
-    enabled: !!planId,
+    queryKey: ['content-items'],
+    queryFn: () => fetchContentItems(),
   });
 }
 
-export function useContentItemsByStatus(planId: string | null, status: ItemStatus) {
+export function useContentItemsByStatus(status: ItemStatus) {
   return useQuery({
-    queryKey: ['content-items', planId, 'status', status],
-    queryFn: () => (planId ? fetchContentItemsByStatus(planId, status) : []),
-    enabled: !!planId,
+    queryKey: ['content-items', 'status', status],
+    queryFn: () => fetchContentItemsByStatus(status),
   });
 }
 
 export function useContentItemsByDateRange(
-  planId: string | null,
   startDate: string,
   endDate: string
 ) {
   return useQuery({
-    queryKey: ['content-items', planId, 'date-range', startDate, endDate],
-    queryFn: () => (planId ? fetchContentItemsByDateRange(planId, startDate, endDate) : []),
-    enabled: !!planId,
+    queryKey: ['content-items', 'date-range', startDate, endDate],
+    queryFn: () => fetchContentItemsByDateRange(startDate, endDate),
   });
 }
 
@@ -56,7 +52,6 @@ export function useCreateContentItem() {
 
   return useMutation({
     mutationFn: (item: {
-      plan_id: string;
       title: string;
       description?: string;
       platform: Platform;
@@ -65,8 +60,8 @@ export function useCreateContentItem() {
       content: ItemContent;
       position?: number;
     }) => createContentItem(item),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['content-items', variables.plan_id] });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['content-items'] });
     },
   });
 }
@@ -77,7 +72,6 @@ export function useBatchCreateContentItems() {
   return useMutation({
     mutationFn: (
       items: Array<{
-        plan_id: string;
         title: string;
         description?: string;
         platform: Platform;
@@ -87,10 +81,8 @@ export function useBatchCreateContentItems() {
         position?: number;
       }>
     ) => batchCreateContentItems(items),
-    onSuccess: (_, variables) => {
-      if (variables.length > 0) {
-        queryClient.invalidateQueries({ queryKey: ['content-items', variables[0].plan_id] });
-      }
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['content-items'] });
     },
   });
 }
@@ -106,8 +98,8 @@ export function useUpdateContentItem() {
       itemId: string;
       updates: Partial<Omit<ContentItem, 'id' | 'plan_id' | 'user_id' | 'created_at' | 'updated_at'>>;
     }) => updateContentItem(itemId, updates),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['content-items', data.plan_id] });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['content-items'] });
     },
   });
 }
@@ -118,8 +110,8 @@ export function useUpdateItemStatus() {
   return useMutation({
     mutationFn: ({ itemId, status }: { itemId: string; status: ItemStatus }) =>
       updateItemStatus(itemId, status),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['content-items', data.plan_id] });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['content-items'] });
     },
   });
 }
@@ -138,13 +130,9 @@ export function useUpdateItemPosition() {
       status?: ItemStatus;
     }) => updateItemPosition(itemId, position, status),
     onMutate: async ({ itemId, position, status }) => {
-      // Cancel any outgoing refetches
       await queryClient.cancelQueries({ queryKey: ['content-items'] });
-
-      // Snapshot the previous value
       const previousItems = queryClient.getQueriesData({ queryKey: ['content-items'] });
 
-      // Optimistically update all content-items queries
       queryClient.setQueriesData<ContentItem[]>({ queryKey: ['content-items'] }, (old) => {
         if (!old) return old;
         return old.map((item) => {
@@ -162,15 +150,14 @@ export function useUpdateItemPosition() {
       return { previousItems };
     },
     onError: (err, variables, context) => {
-      // Rollback on error
       if (context?.previousItems) {
         context.previousItems.forEach(([queryKey, data]) => {
           queryClient.setQueryData(queryKey, data);
         });
       }
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['content-items', data.plan_id] });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['content-items'] });
     },
   });
 }
@@ -181,8 +168,8 @@ export function useUpdateItemContent() {
   return useMutation({
     mutationFn: ({ itemId, content }: { itemId: string; content: Partial<ItemContent> }) =>
       updateItemContent(itemId, content),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['content-items', data.plan_id] });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['content-items'] });
     },
   });
 }
@@ -191,10 +178,10 @@ export function useDeleteContentItem() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ itemId, planId }: { itemId: string; planId: string }) =>
+    mutationFn: ({ itemId }: { itemId: string }) =>
       deleteContentItem(itemId),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['content-items', variables.planId] });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['content-items'] });
     },
   });
 }
@@ -204,8 +191,8 @@ export function useDuplicateContentItem() {
 
   return useMutation({
     mutationFn: (itemId: string) => duplicateContentItem(itemId),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['content-items', data.plan_id] });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['content-items'] });
     },
   });
 }

@@ -136,7 +136,11 @@ export function buildContentGenerationPrompt(
   platform: string,
   idea: { title: string; description: string; contentPillar: string; hook?: string },
   niche: string,
-  targetAudience: string
+  targetAudience: string,
+  research?: {
+    summary?: string;
+    sources?: Array<{ title: string; url: string }>;
+  }
 ): string {
   const template = PLATFORM_CONTENT_TEMPLATES[platform.toLowerCase()] || PLATFORM_CONTENT_TEMPLATES.twitter;
   const platformContext = buildPlatformContext(platform);
@@ -144,135 +148,85 @@ export function buildContentGenerationPrompt(
   const isTwitter = platform.toLowerCase() === 'twitter';
 
   return `
-You are an expert ${platform} content creator specializing in ${niche} content for ${targetAudience}.
+<context>
+You are an elite ${platform} content creator specializing in ${niche} content for ${targetAudience}.
+Your task is to generate a high-performing, engagement-optimized piece of content based on the provided idea.
+</context>
 
+<platform_context>
 ${platformContext}
+</platform_context>
 
-${isTwitter ? `CRITICAL TWITTER THREAD REQUIREMENT:
+${isTwitter ? `<critical_platform_requirement>
 You MUST generate a COMPLETE Twitter thread with 3-10 tweets.
-- DO NOT generate only one tweet
-- Include all tweets in the script_content field
-- Each tweet on a separate line
-- Number each tweet (1/X, 2/X, etc.)
-- Every single tweet must be included in your response
-- Example format:
-  1/5 Hook tweet here...
-  2/5 Context tweet here...
-  3/5 Value tweet here...
-  4/5 More value here...
-  5/5 CTA tweet here...
-` : ''}
+- DO NOT generate only one tweet.
+- Include all tweets in the script_content field.
+- Each tweet on a separate line.
+- Number each tweet (1/X, 2/X, etc.).
+- Build momentum across tweets.
+- Make each tweet self-contained and quotable.
+- End final tweet with an engaging CTA.
+</critical_platform_requirement>` : ''}
 
-CONTENT IDEA TO DEVELOP:
+<idea_to_develop>
 Title: ${idea.title}
 Description: ${idea.description}
 Content Pillar: ${idea.contentPillar}
 ${idea.hook ? `Suggested Hook: ${idea.hook}` : ''}
+</idea_to_develop>
 
-CONTENT FORMAT: ${template.format}
+${research?.summary ? `<research_data>
+ONLY use these facts for any current-affairs claims. Do not invent facts.
 
-STRUCTURE TO FOLLOW:
+Summary:
+${research.summary}
+
+Sources:
+${(research.sources || []).map((s) => `- ${s.title}: ${s.url}`).join('\n')}
+</research_data>` : ''}
+
+<formatting_requirements>
+Format: ${template.format}
+
+Structure to follow:
 ${template.structure.map((step, i) => `${i + 1}. ${step}`).join('\n')}
 
-PLATFORM-SPECIFIC HOOKS:
-${template.hooks.map((hook, i) => `${i + 1}. ${hook}`).join('\n')}
+Platform-Specific Hooks:
+${template.hooks.map((hook, i) => `- ${hook}`).join('\n')}
 
-EXAMPLE FOR INSPIRATION:
+Platform Formatting Guide:
+${getPlatformFormattingGuide(platform)}
+</formatting_requirements>
+
+<example_for_inspiration>
 ${template.examples[0]}
+</example_for_inspiration>
 
-MANDATORY REQUIREMENTS:
-
+<mandatory_rules>
 1. SCROLL-STOPPING HOOK:
-   ${engagementStrategy.hooks[0].template}
-   - Must grab attention in first 0.5-3 seconds
-   - Use contrarian angle or surprising data
-   - Create curiosity gap
+   Use pattern: ${engagementStrategy.hooks[0].template}
+   - Must grab attention immediately (first 0.5-3 seconds or first line).
+   - Use a contrarian angle or surprising data.
+   - Create a curiosity gap.
 
 2. SPECIFIC, NOT GENERIC:
-   ✅ Use: Exact numbers, specific examples, concrete steps
-   ❌ Avoid: "Tips", "boost", "grow" without specifics
-   ✅ Good: "The 3-tweet thread format that got me 10K followers in 30 days"
-   ❌ Bad: "How to grow your followers"
+   ✅ Use: Exact numbers, specific examples, concrete steps.
+   ❌ Avoid: Vague words like "Tips", "boost", "grow" without specifics.
 
 3. RESULTS-FOCUSED:
-   - Include specific outcomes
-   - Use timeframes
-   - Show transformation
+   - Include specific outcomes and timeframes.
+   - Show transformation (before/after).
 
 4. ENGAGEMENT OPTIMIZATION:
-   Pattern Interrupts: ${engagementStrategy.patternInterrupts.slice(0, 3).join(', ')}
-   CTA Options: ${engagementStrategy.callToActions.slice(0, 3).join(' OR ')}
+   - Incorporate Pattern Interrupts: ${engagementStrategy.patternInterrupts.slice(0, 3).join(', ')}
+   - Use Call-to-Actions (CTA): ${engagementStrategy.callToActions.slice(0, 3).join(' OR ')}
 
-5. PLATFORM NATIVE:
-   - Use platform-specific language
-   - Follow format conventions
-   - Optimize for algorithm preferences
-
-6. VALUE DELIVERY:
-   - Educational OR entertaining OR inspiring
-   - Actionable insights
-   - Save-worthy content
-
-OUTPUT FORMAT:
-
-Return ONLY a JSON object (no markdown, no code blocks) with this exact structure:
-
-${getSchemaInstructions(platform)}
-
-PLATFORM-SPECIFIC FORMATTING:
-
-${getPlatformFormattingGuide(platform)}
-
-Now create scroll-stopping, engagement-driving content for this idea. Return ONLY the JSON object:
+5. PLATFORM NATIVE DELIVERY:
+   - Use platform-specific language and conventions.
+   - Optimize for the specific platform's algorithm preferences.
+   - Deliver high value (Educational, Entertaining, or Inspiring).
+</mandatory_rules>
   `.trim();
-}
-
-function getSchemaInstructions(platform: string): string {
-  const platformLower = platform.toLowerCase();
-
-  switch (platformLower) {
-    case 'twitter':
-      return `{
-  "script_content": "Complete thread with ALL tweets (3-10 tweets). Format each tweet on separate lines with thread number prefix (1/X, 2/X, etc.). Keep each tweet under 280 characters. Example:\\n1/5 Hook tweet...\\n2/5 Context tweet...\\n3/5 Value tweet...",
-  "hashtags": ["array", "of", "hashtags"]
-}`;
-    case 'linkedin':
-      return `{
-  "script_content": "The main post content",
-  "hashtags": ["array", "of", "hashtags"]
-}`;
-
-    case 'instagram':
-    case 'tiktok':
-      return `{
-  "caption": "Short caption for the post",
-  "script_content": "Full script with timing and descriptions",
-  "visual_cues": ["List", "of", "visual", "suggestions"],
-  "audio_suggestion": "Trending audio or music style recommendation",
-  "hashtags": ["array", "of", "relevant", "hashtags"]
-}`;
-
-    case 'youtube':
-      return `{
-  "caption": "Video description",
-  "script_content": "Full script with timing and retention hooks",
-  "visual_cues": ["List", "of", "visual", "suggestions"],
-  "hashtags": ["array", "of", "hashtags"]
-}`;
-
-    case 'facebook':
-      return `{
-  "caption": "The post content",
-  "script_content": "Full post text",
-  "hashtags": ["array", "of", "hashtags"]
-}`;
-
-    default:
-      return `{
-  "script_content": "The main content",
-  "hashtags": ["hashtags"]
-}`;
-  }
 }
 
 function getPlatformFormattingGuide(platform: string): string {

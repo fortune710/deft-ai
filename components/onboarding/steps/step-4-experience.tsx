@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { EXPERIENCE_OPTIONS } from '@/lib/validations/onboarding';
+import { EXPERIENCE_OPTIONS } from '@/lib/validations/onboarding/options';
 import { Sprout, User, Rocket, GraduationCap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
