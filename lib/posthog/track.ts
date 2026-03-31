@@ -88,7 +88,6 @@ export const ContentEngineTracking = {
     trackEvent('content_engine_generate_plan', properties);
   },
   planGenerated: (properties?: {
-    planId?: string;
     itemCount?: number;
     duration?: number;
   }) => {
@@ -101,7 +100,6 @@ export const ContentEngineTracking = {
     itemId?: string;
     platform?: string;
     status?: string;
-    planId?: string | null;
   }) => {
     trackEvent('content_engine_item_created', properties);
   },
