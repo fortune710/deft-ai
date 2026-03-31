@@ -11,11 +11,25 @@ export interface ItemContent {
   hashtags?: string[];
   clip_suggestions?: string[];
   caption?: string;
+  metadata?: {
+    hookType?: string;
+    structure?: string;
+    callToAction?: string;
+    visualCues?: string[];
+    audioSuggestion?: string;
+    researchSummary?: string;
+    researchSources?: Array<{
+      title: string;
+      url: string;
+      favicon?: string;
+    }>;
+    isCurrentAffairs?: boolean;
+    currentAffairsReason?: string;
+  };
 }
 
 export interface ContentItem {
   id: string;
-  plan_id: string;
   user_id: string;
   title: string;
   description: string | null;
@@ -28,27 +42,6 @@ export interface ContentItem {
   updated_at: string;
 }
 
-export interface ContentPlan {
-  id: string;
-  user_id: string;
-  title: string;
-  description: string | null;
-  start_date: string;
-  end_date: string;
-  platforms: Platform[];
-  is_active: boolean;
-  archived_at: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface PlanConfig {
-  title?: string;
-  startDate: Date;
-  platforms: Platform[];
-  frequency: string;
-}
-
 export interface ContentItemFormData {
   title: string;
   description?: string;
@@ -58,26 +51,9 @@ export interface ContentItemFormData {
   content: ItemContent;
 }
 
-export interface GeneratePlanFormData {
-  title?: string;
-  start_date: Date;
-  platforms: Platform[];
-}
-
-export interface PlanStats {
-  total: number;
-  idea: number;
-  in_progress: number;
-  ready: number;
-  published: number;
-  upcoming: number;
-}
-
-type TContentPlan = Omit<ContentPlan, 'id' | 'created_at' | 'updated_at'>;
-type TContentItem = Omit<ContentItem, 'id' | 'created_at' | 'updated_at' | 'plan_id'>;
+type TContentItem = Omit<ContentItem, 'id' | 'created_at' | 'updated_at'>;
 
 export interface PublishPlanPayload {
-  contentPlan: TContentPlan;
   contentItems: TContentItem[];
   userId: string;
 }

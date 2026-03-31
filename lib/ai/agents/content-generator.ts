@@ -3,7 +3,6 @@ import { AI_MODELS, AIModelConfig } from '@/types/ai-models';
 import { getModel } from '../models/get-model';
 import { buildContentGenerationPrompt } from '../prompts/content-templates';
 import {
-  generateFallbackContent,
   validatePlatformContent,
   extractMetadataFromContent,
 } from '../utils/content-generator-utils';
@@ -13,6 +12,7 @@ import { buildCurrentAffairsClassifierPrompt } from '../prompts/current-affairs-
 import { tavilyResearch } from '@/lib/integrations/tavily';
 import { z } from "zod";
 import { logger } from '@/lib/logger';
+import { BaseMessageLike } from '@langchain/core/messages';
 
 const CurrentAffairsClassificationSchema = z.object({
   isCurrentAffairs: z.boolean().describe('Whether this is a current affairs/trending topic'),
@@ -96,7 +96,7 @@ export class ContentGeneratorAgent implements Agent {
 
         // Fallback logic
         try {
-          const fallbackContent = await generateFallbackContent(idea, this.modelConfig);
+          const fallbackContent = await this.generateFallbackContent(idea, this.modelConfig);
           generatedContent.push({
             idea,
             content: fallbackContent,
@@ -201,6 +201,29 @@ Goal: ${context.goal}.
       platformContent,
       metadata,
     };
+  }
+
+  private async generateFallbackContent(idea: ContentIdea, modelConfig: AIModelConfig): Promise<string> {
+    const fallbackPrompt = `
+  Create a simple, short social media post based on this idea:
+  Title: ${idea.title}
+  Description: ${idea.description}
+  Platform: ${idea.platform}
+  
+  Keep it concise and engaging. Just return the post text, no JSON.
+    `.trim();
+
+    const systemPrompt = 'You are a content creator. Return only the post text, no explanations.';
+    const model = getModel(modelConfig);
+    const baseMessages: BaseMessageLike[][] = [
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: fallbackPrompt }
+      ]
+    ];
+    const result = await model.generate(baseMessages);
+    const text = result.generations.flatMap((gen) => gen.map((g) => g.text)).join('');
+    return text;
   }
 
   private async classifyCurrentAffairs(

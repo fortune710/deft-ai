@@ -16,14 +16,13 @@ export async function fetchContentItem(itemId: string): Promise<ContentItem> {
   return data;
 }
 
-export async function fetchContentItems(planId: string): Promise<ContentItem[]> {
+export async function fetchContentItems(): Promise<ContentItem[]> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
 
   const { data, error } = await supabase
     .from('content_items')
     .select('*')
-    .eq('plan_id', planId)
     .eq('user_id', user.id)
     .order('scheduled_date', { ascending: true });
 
@@ -32,7 +31,6 @@ export async function fetchContentItems(planId: string): Promise<ContentItem[]> 
 }
 
 export async function fetchContentItemsByStatus(
-  planId: string,
   status: ItemStatus
 ): Promise<ContentItem[]> {
   const { data: { user } } = await supabase.auth.getUser();
@@ -41,7 +39,6 @@ export async function fetchContentItemsByStatus(
   const { data, error } = await supabase
     .from('content_items')
     .select('*')
-    .eq('plan_id', planId)
     .eq('user_id', user.id)
     .eq('status', status)
     .order('position', { ascending: true });
@@ -51,7 +48,6 @@ export async function fetchContentItemsByStatus(
 }
 
 export async function fetchContentItemsByDateRange(
-  planId: string,
   startDate: string,
   endDate: string
 ): Promise<ContentItem[]> {
@@ -61,7 +57,6 @@ export async function fetchContentItemsByDateRange(
   const { data, error } = await supabase
     .from('content_items')
     .select('*')
-    .eq('plan_id', planId)
     .eq('user_id', user.id)
     .gte('scheduled_date', startDate)
     .lte('scheduled_date', endDate)
@@ -72,7 +67,6 @@ export async function fetchContentItemsByDateRange(
 }
 
 export async function createContentItem(item: {
-  plan_id: string | null;
   title: string;
   description?: string;
   platform: Platform;
@@ -88,7 +82,6 @@ export async function createContentItem(item: {
     .from('content_items')
     .insert({
       user_id: user.id,
-      plan_id: item.plan_id,
       title: item.title,
       description: item.description || null,
       platform: item.platform,
@@ -106,7 +99,6 @@ export async function createContentItem(item: {
 
 export async function batchCreateContentItems(
   items: Array<{
-    plan_id: string;
     title: string;
     description?: string;
     platform: Platform;
@@ -121,7 +113,6 @@ export async function batchCreateContentItems(
 
   const itemsWithUserId = items.map((item) => ({
     user_id: user.id,
-    plan_id: item.plan_id,
     title: item.title,
     description: item.description || null,
     platform: item.platform,
@@ -238,7 +229,6 @@ export async function duplicateContentItem(itemId: string): Promise<ContentItem>
     .from('content_items')
     .insert({
       user_id: user.id,
-      plan_id: originalItem.plan_id,
       title: `${originalItem.title} (Copy)`,
       description: originalItem.description,
       platform: originalItem.platform,
