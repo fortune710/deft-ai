@@ -46,24 +46,23 @@ export default function CalendarPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Calendar View</h1>
           <p className="text-muted-foreground">
-            View your content plan in calendar format
+            View your content ideas in calendar format
           </p>
         </div>
 
         {showEmptyState ? (
           <div className="flex flex-col items-center justify-center min-h-[400px] space-y-6">
             <div className="text-center space-y-3">
-              <h2 className="text-2xl font-bold">No Active Content Plan</h2>
+              <h2 className="text-2xl font-bold">No Content Ideas Yet</h2>
               <p className="text-gray-600 dark:text-gray-400 max-w-md">
-                Get started by generating a 30-day content plan. AI will create a complete
-                calendar with content ideas tailored to your niche and goals.
+                Generate a fresh batch of ideas and scripts tailored to your niche and goals.
               </p>
             </div>
             <Button
               onClick={() => router.push('/content-engine')}
               size="lg"
             >
-              Go to Content Engine
+              Go to Content Ideas
             </Button>
           </div>
         ) : (
@@ -78,8 +77,8 @@ export default function CalendarPage() {
 
             {items.length === 0 && !itemsLoading && (
               <div className="text-center py-12 text-gray-500">
-                <p>No content items in this plan yet.</p>
-                <p className="text-sm mt-1">Generate a new plan to get started.</p>
+                <p>No ideas yet.</p>
+                <p className="text-sm mt-1">Generate ideas to get started.</p>
               </div>
             )}
           </>

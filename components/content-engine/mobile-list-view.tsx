@@ -18,7 +18,6 @@ import type { ContentItem, ItemStatus, Platform } from '@/types/content-engine';
 
 interface MobileListViewProps {
   items: ContentItem[];
-  planId: string;
 }
 
 const statusGroups: { id: ItemStatus; label: string; color: string }[] = [
@@ -46,7 +45,7 @@ const platformColors: Record<Platform, string> = {
   facebook: 'bg-blue-100 text-blue-700',
 };
 
-export function MobileListView({ items, planId }: MobileListViewProps) {
+export function MobileListView({ items }: MobileListViewProps) {
   const [selectedItem, setSelectedItem] = useState<ContentItem | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<Platform | 'all'>('all');
@@ -81,7 +80,7 @@ export function MobileListView({ items, planId }: MobileListViewProps) {
     if (!confirm('Are you sure you want to delete this content item?')) return;
 
     deleteItem.mutate(
-      { itemId, planId },
+      { itemId },
       {
         onSuccess: () => toast.success('Content deleted'),
         onError: () => toast.error('Failed to delete content'),
@@ -161,8 +160,8 @@ export function MobileListView({ items, planId }: MobileListViewProps) {
                                   </p>
                                 )}
                               </div>
-                              <Badge className={platformColors[item.platform]}>
-                                {platformLabels[item.platform]}
+                              <Badge className={platformColors[item.platform as Platform]}>
+                                {platformLabels[item.platform as Platform]}
                               </Badge>
                             </div>
 

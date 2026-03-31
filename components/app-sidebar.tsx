@@ -32,7 +32,7 @@ export interface NavItem {
 
 export const navItems: NavItem[] = [
   {
-    title: 'Content Engine',
+    title: 'Content Ideas',
     href: '/content-engine',
     icon: Sparkles,
     visible: true, // Always visible

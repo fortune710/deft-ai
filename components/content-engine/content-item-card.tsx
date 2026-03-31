@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
-import { MoreVertical, Calendar, Trash2, Copy, Eye, Edit2 } from 'lucide-react';
+import { MoreVertical, Trash2, Copy, Edit2, Calendar as CalendarIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -23,6 +23,12 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Calendar as DateCalendar } from '@/components/ui/calendar';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { useUpdateContentItem } from '@/hooks/use-content-items';
 import { toast } from 'sonner';
 import type { ContentItem } from '@/types/content-engine';
@@ -63,6 +69,7 @@ export function ContentItemCard({
   const router = useRouter();
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [newTitle, setNewTitle] = useState(item.title);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
   const updateItem = useUpdateContentItem();
 
   // Sync title when item changes
@@ -180,14 +187,43 @@ export function ContentItemCard({
         </p>
       )}
 
-      <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
-        <Calendar className="h-3 w-3" />
-        <span>{formattedDate}</span>
-        {daysUntil >= 0 && (
-          <span className="text-xs text-gray-400">
-            ({daysUntil === 0 ? 'Today' : `${daysUntil}d`})
-          </span>
-        )}
+      <div className="flex items-center justify-between gap-2 text-xs text-gray-500 dark:text-gray-400">
+        <Popover open={scheduleOpen} onOpenChange={setScheduleOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <CalendarIcon className="h-3.5 w-3.5 mr-1 text-gray-400" />
+              <span>{formattedDate}</span>
+              {daysUntil >= 0 && (
+                <span className="ml-1 text-[10px] text-gray-400">
+                  {daysUntil === 0 ? 'Today' : `${daysUntil}d`}
+                </span>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start" onClick={(e) => e.stopPropagation()}>
+            <DateCalendar
+              mode="single"
+              selected={scheduledDate}
+              onSelect={(date) => {
+                if (!date) return;
+                updateItem.mutate(
+                  { itemId: item.id, updates: { scheduled_date: format(date, 'yyyy-MM-dd') } },
+                  {
+                    onSuccess: () => toast.success('Schedule updated'),
+                    onError: () => toast.error('Failed to update schedule'),
+                  }
+                );
+                setScheduleOpen(false);
+              }}
+              initialFocus
+            />
+          </PopoverContent>
+        </Popover>
       </div>
 
       {/* Non-modal so it won't lock pointer-events on the whole app (and avoids DnD + modal issues) */}

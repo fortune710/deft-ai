@@ -1,15 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
-import { Sparkles, LayoutGrid, List, Smartphone, Loader2 } from 'lucide-react';
-import { useMemo } from 'react';
+import { Sparkles, LayoutGrid, List, Loader2 } from 'lucide-react';
 import { AppLayout } from '@/components/app-layout';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useContentProfile } from '@/hooks/use-content-profile';
-import { useActivePlan } from '@/hooks/use-content-plans';
 import { useContentItems } from '@/hooks/use-content-items';
 import { useContentEngineProgress } from '@/hooks/use-content-engine-progress';
 import { useQueryClient } from '@tanstack/react-query';
@@ -17,8 +15,6 @@ import { toast } from 'sonner';
 import { MobileListView } from '@/components/content-engine/mobile-list-view';
 import { GeneratePlanDialog } from '@/components/content-engine/generate-plan-dialog';
 import { GeneratePlanButton } from '@/components/content-engine/generate-plan-button';
-import { PlanSelector } from '@/components/content-engine/plan-selector';
-import { ArchivedPlansDialog } from '@/components/content-engine/archived-plans-dialog';
 import { BoardViewSkeleton } from '@/components/content-engine/board-view-skeleton';
 import { ListViewSkeleton } from '@/components/content-engine/list-view-skeleton';
 import type { ViewMode } from '@/types/content-engine';
@@ -38,14 +34,12 @@ export default function ContentEnginePage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { profile, isLoading: profileLoading } = useContentProfile();
-  const { data: activePlan, isLoading: planLoading } = useActivePlan();
-  const { data: items = [], isLoading: itemsLoading } = useContentItems(activePlan?.id || null);
+  const { data: items = [], isLoading: itemsLoading } = useContentItems();
   const { progress, isGenerating } = useContentEngineProgress();
 
   const [viewMode, setViewMode] = useState<ViewMode>('board');
   const [isMobile, setIsMobile] = useState(false);
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
-  const [archivedDialogOpen, setArchivedDialogOpen] = useState(false);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -68,45 +62,32 @@ export default function ContentEnginePage() {
     localStorage.setItem('content-engine-view', mode);
   };
 
-  const handlePlanGenerated = (planId: string) => {
+  const handlePlanGenerated = () => {
     setGenerateDialogOpen(false);
-    // Immediately refresh plan + items so the UI reflects the new active plan.
-    queryClient.invalidateQueries({ queryKey: ['content-plans'] });
-    queryClient.invalidateQueries({ queryKey: ['content-plans', 'active'] });
     queryClient.invalidateQueries({ queryKey: ['content-items'] });
   };
 
-  // Handle completion when progress is deleted
   useEffect(() => {
     if (!isGenerating && progress === null) {
-      // Generation completed, refresh plans
-      queryClient.invalidateQueries({ queryKey: ['content-plans'] });
-      queryClient.invalidateQueries({ queryKey: ['content-plans', 'active'] });
       queryClient.invalidateQueries({ queryKey: ['content-items'] });
     }
   }, [isGenerating, progress, queryClient]);
 
   const currentProgress = progress?.progress || 0;
-  const progressMessage = progress?.message || 'Generating your plan…';
+  const progressMessage = progress?.message || 'Generating your ideas…';
 
   const friendlyStatus = useMemo(() => {
     if (!isGenerating) return '';
-
-    // Keep these intentionally vague and user-friendly (no agents, no workflow disclosure).
     if (currentProgress < 20) return 'Getting things ready…';
     if (currentProgress < 45) return 'Generating ideas tailored to you…';
-    if (currentProgress < 70) return 'Shaping your 30-day plan…';
-    if (currentProgress < 90) return 'Polishing details and spacing posts…';
-    return 'Saving your plan…';
+    if (currentProgress < 70) return 'Drafting scripts and hooks…';
+    if (currentProgress < 90) return 'Polishing details and pacing…';
+    return 'Saving your ideas…';
   }, [isGenerating, currentProgress]);
 
-  // Manage persistent toast for content generation progress
   useEffect(() => {
     const toastId = 'content-generation-progress';
-
     if (isGenerating) {
-      // Show or update the toast with progress
-      // Using toast.loading with the same ID will update the existing toast
       toast.loading(
         <div className="space-y-2 w-full">
           <p className="font-semibold text-sm">{progressMessage}</p>
@@ -114,7 +95,7 @@ export default function ContentEnginePage() {
             <p className="text-xs text-muted-foreground">{friendlyStatus}</p>
           )}
           <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mt-2">
-            <Progress 
+            <Progress
               value={currentProgress}
               className="h-2 rounded-full transition-all duration-500"
             />
@@ -124,25 +105,17 @@ export default function ContentEnginePage() {
             <span className="text-[10px]">This may take a while</span>
           </div>
         </div>,
-        {
-          id: toastId,
-          duration: Infinity, // Keep it persistent
-        }
+        { id: toastId, duration: Infinity }
       );
     } else {
-      // Dismiss the toast when generation is complete
       toast.dismiss(toastId);
     }
-
-    // Cleanup on unmount
     return () => {
-      if (!isGenerating) {
-        toast.dismiss(toastId);
-      }
+      if (!isGenerating) toast.dismiss(toastId);
     };
   }, [isGenerating, currentProgress, progressMessage, friendlyStatus]);
 
-  if (profileLoading || planLoading) {
+  if (profileLoading) {
     return (
       <AppLayout>
         <div className="flex items-center justify-center min-h-[500px]">
@@ -165,19 +138,18 @@ export default function ContentEnginePage() {
     );
   }
 
-  const showEmptyState = !activePlan;
+  const showEmptyState = items.length === 0 && !itemsLoading && !isGenerating;
 
   return (
     <AppLayout>
       <div className="space-y-6 pb-20">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className='max-sm:hidden'>
-            <h1 className="text-3xl font-bold tracking-tight">Content Engine</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Content Ideas</h1>
             <p className="text-muted-foreground">
-              AI-powered 30-day content planning and management
+              AI-generated ideas and scripts, ready to schedule
             </p>
           </div>
-
           <GeneratePlanButton onClick={() => setGenerateDialogOpen(true)} />
         </div>
 
@@ -187,38 +159,30 @@ export default function ContentEnginePage() {
               <div className="mx-auto w-16 h-16 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
                 <Sparkles className="h-8 w-8 text-blue-600 dark:text-blue-400" />
               </div>
-              <h2 className="text-2xl font-bold">No Active Content Plan</h2>
+              <h2 className="text-2xl font-bold">No Content Ideas Yet</h2>
               <p className="text-gray-600 dark:text-gray-400 max-w-md">
-                Get started by generating a 30-day content plan. AI will create a complete
-                calendar with content ideas tailored to your niche and goals.
+                Generate a fresh batch of content ideas and scripts tailored to your niche and goals.
               </p>
             </div>
-            <Button
-              onClick={() => setGenerateDialogOpen(true)}
-              size="lg"
-            >
+            <Button onClick={() => setGenerateDialogOpen(true)} size="lg">
               <Sparkles className="h-4 w-4 mr-2" />
-              Generate Your First Plan
+              Generate Your First Ideas
             </Button>
           </div>
         ) : (
           <>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <PlanSelector
-                activePlan={activePlan}
-                onViewArchived={() => setArchivedDialogOpen(true)}
-              />
-
+              <div />
               {!isMobile && (
                 <Tabs value={viewMode} onValueChange={(v) => handleViewChange(v as ViewMode)}>
                   <TabsList>
                     <TabsTrigger value="board">
                       <LayoutGrid className="h-4 w-4 mr-2" />
-                      Board
+                      Kanban
                     </TabsTrigger>
                     <TabsTrigger value="list">
                       <List className="h-4 w-4 mr-2" />
-                      List
+                      Table
                     </TabsTrigger>
                   </TabsList>
                 </Tabs>
@@ -232,11 +196,11 @@ export default function ContentEnginePage() {
             ) : (
               <div className="mt-6">
                 {isMobile ? (
-                  <MobileListView items={items} planId={activePlan.id} />
+                  <MobileListView items={items} />
                 ) : (
                   <>
-                    {viewMode === 'board' && <BoardView items={items} planId={activePlan.id} />}
-                    {viewMode === 'list' && <ListView items={items} planId={activePlan.id} />}
+                    {viewMode === 'board' && <BoardView items={items} />}
+                    {viewMode === 'list' && <ListView items={items} />}
                   </>
                 )}
               </div>
@@ -244,8 +208,8 @@ export default function ContentEnginePage() {
 
             {items.length === 0 && !itemsLoading && (
               <div className="text-center py-12 text-gray-500">
-                <p>No content items in this plan yet.</p>
-                <p className="text-sm mt-1">Generate a new plan to get started.</p>
+                <p>No ideas yet.</p>
+                <p className="text-sm mt-1">Generate ideas to get started.</p>
               </div>
             )}
           </>
@@ -256,11 +220,6 @@ export default function ContentEnginePage() {
         open={generateDialogOpen}
         onOpenChange={setGenerateDialogOpen}
         onSuccess={handlePlanGenerated}
-      />
-
-      <ArchivedPlansDialog
-        open={archivedDialogOpen}
-        onOpenChange={setArchivedDialogOpen}
       />
     </AppLayout>
   );
