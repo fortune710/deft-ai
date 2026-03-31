@@ -5,17 +5,15 @@ import { Loader2 } from 'lucide-react';
 import { AppLayout } from '@/components/app-layout';
 import { Button } from '@/components/ui/button';
 import { useContentProfile } from '@/hooks/use-content-profile';
-import { useActivePlan } from '@/hooks/use-content-plans';
 import { useContentItems } from '@/hooks/use-content-items';
 import { CalendarView } from '@/components/content-engine/calendar-view';
 
 export default function CalendarPage() {
   const router = useRouter();
   const { profile, isLoading: profileLoading } = useContentProfile();
-  const { data: activePlan, isLoading: planLoading } = useActivePlan();
-  const { data: items = [], isLoading: itemsLoading } = useContentItems(activePlan?.id || null);
+  const { data: items = [], isLoading: itemsLoading } = useContentItems();
 
-  if (profileLoading || planLoading) {
+  if (profileLoading) {
     return (
       <AppLayout>
         <div className="flex items-center justify-center min-h-[500px]">
@@ -38,7 +36,7 @@ export default function CalendarPage() {
     );
   }
 
-  const showEmptyState = !activePlan;
+  const showEmptyState = !items.length;
 
   return (
     <AppLayout>
@@ -72,7 +70,7 @@ export default function CalendarPage() {
                 <Loader2 className="w-8 h-8 animate-spin" />
               </div>
             ) : (
-              <CalendarView items={items} planStartDate={activePlan.start_date} />
+              <CalendarView items={items} planStartDate={items[0].scheduled_date} />
             )}
 
             {items.length === 0 && !itemsLoading && (
