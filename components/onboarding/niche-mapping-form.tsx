@@ -16,7 +16,7 @@ import {
   step3Schema,
   step4Schema,
   step5Schema,
-} from '@/lib/validations/onboarding';
+} from '@/lib/validations/onboarding/questions';
 
 interface NicheMappingFormProps {
   onComplete: (data: OnboardingFormData) => Promise<void>;
@@ -28,7 +28,7 @@ export function NicheMappingForm({ onComplete }: NicheMappingFormProps) {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const [formData, setFormData] = useState<OnboardingFormData>({
-    question_1_niche: '',
+    question_1_niche: null,
     question_2_goal: '',
     question_3_platforms: [],
     question_4_experience: '',

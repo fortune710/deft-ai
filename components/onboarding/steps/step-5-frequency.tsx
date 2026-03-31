@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { FREQUENCY_OPTIONS } from '@/lib/validations/onboarding';
+import { FREQUENCY_OPTIONS } from '@/lib/validations/onboarding/options';
 import { Calendar, CalendarDays, Zap, HelpCircle, Clock, Loader2, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';

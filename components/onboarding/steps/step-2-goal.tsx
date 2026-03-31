@@ -2,7 +2,7 @@
 
 import { motion } from 'framer-motion';
 import { Target, TrendingUp, Award, Send, DollarSign } from 'lucide-react';
-import { GOAL_OPTIONS } from '@/lib/validations/onboarding';
+import { GOAL_OPTIONS } from '@/lib/validations/onboarding/options';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 

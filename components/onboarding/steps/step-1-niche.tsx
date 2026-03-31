@@ -3,7 +3,7 @@
 import { motion } from 'framer-motion';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { NICHE_EXAMPLES } from '@/lib/validations/onboarding';
+import { NICHE_EXAMPLES } from '@/lib/validations/onboarding/options';
 
 interface Step1NicheProps {
   value: string;
