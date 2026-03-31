@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { nicheDiscoveryWorkflow } from "@/lib/ai/agents/niche-discovery-graph";
+import { nicheDiscoveryWorkflow } from "@/lib/ai/agents/niche-discovery-agent";
 import { getCheckpointer } from "@/lib/ai/agents/checkpointer";
 import { Command } from "@langchain/langgraph";
 import { NicheAgentStreamEvent } from "@/types/niche-agent";
@@ -56,7 +56,14 @@ export async function POST(req: NextRequest) {
                             sendEvent({
                                 type: 'final_result',
                                 data: {
-                                    detailedNiche: finalNicheDescription || "",
+                                    detailedNiche: finalNicheDescription || {
+                                        niche: "",
+                                        subNiche: "",
+                                        contentPillars: [],
+                                        targetAudience: "",
+                                        tone: "",
+                                        doesCurrentAffairs: "never"
+                                    },
                                     reasoningSummary: reasoningSteps?.join(" ") || "",
                                 }
                             });
