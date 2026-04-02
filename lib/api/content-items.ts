@@ -175,7 +175,7 @@ export async function updateItemContent(
 
   const { data: currentItem, error: fetchError } = await supabase
     .from('content_items')
-    .select('content')
+    .select('content, script_content')
     .eq('id', itemId)
     .eq('user_id', user.id)
     .single();
@@ -184,12 +184,15 @@ export async function updateItemContent(
 
   const mergedContent = {
     ...currentItem.content,
-    ...content,
+    ...(typeof content === 'string' ? { script_content: content } : content),
   };
 
   const { data, error } = await supabase
     .from('content_items')
-    .update({ content: mergedContent })
+    .update({
+      content: mergedContent,
+      script_content: typeof content === 'string' ? content : content.script_content ?? currentItem.script_content
+    })
     .eq('id', itemId)
     .eq('user_id', user.id)
     .select()
