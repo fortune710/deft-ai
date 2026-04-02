@@ -10,8 +10,8 @@ import { EditProposalDisplay } from './edit-proposal-display';
 interface ChatMessageProps {
   message: ChatMessageType;
   sessionId: string;
-  onContentUpdate: (content: EditorContent) => void;
-  editorContent: EditorContent;
+  onContentUpdate: (content: any) => void;
+  editorContent: any;
 }
 
 export function ChatMessage({ message, sessionId, onContentUpdate, editorContent }: ChatMessageProps) {
@@ -22,19 +22,34 @@ export function ChatMessage({ message, sessionId, onContentUpdate, editorContent
     if (!message.proposed_changes) return;
 
     try {
-      let updatedContent = { ...editorContent };
+      let updatedContent = typeof editorContent === 'string' ? editorContent : { ...editorContent };
 
       for (const change of message.proposed_changes) {
-        if (change.section === 'fullScript') {
-          updatedContent.fullScript = change.after;
-        } else if (change.section === 'goalAlignedCTA') {
-          updatedContent.goalAlignedCTA = change.after;
-        } else if (change.section === 'hookOptions') {
-          try {
-            const newHooks = JSON.parse(change.after);
-            updatedContent.hookOptions = newHooks;
-          } catch (e) {
-            console.error('Failed to parse hooks:', e);
+        if (typeof updatedContent === 'string') {
+          // If the section is 'markdown' or generic, we just replace the entire content or try string replacement
+          if (change.section === 'markdown') {
+            updatedContent = change.after;
+          } else {
+            // Apply diff or simple string replacement if possible
+            if (updatedContent.includes(change.before) && change.before.trim() !== '') {
+              updatedContent = updatedContent.replace(change.before, change.after);
+            } else {
+              updatedContent = change.after; // Fallback replacing the whole document
+            }
+          }
+        } else {
+          // Legacy object updating
+          if (change.section === 'fullScript') {
+            updatedContent.fullScript = change.after;
+          } else if (change.section === 'goalAlignedCTA') {
+            updatedContent.goalAlignedCTA = change.after;
+          } else if (change.section === 'hookOptions') {
+            try {
+              const newHooks = JSON.parse(change.after);
+              updatedContent.hookOptions = newHooks;
+            } catch (e) {
+              console.error('Failed to parse hooks:', e);
+            }
           }
         }
       }
@@ -75,11 +90,10 @@ export function ChatMessage({ message, sessionId, onContentUpdate, editorContent
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div
-        className={`max-w-[85%] rounded-lg px-4 py-3 ${
-          isUser
+        className={`max-w-[85%] rounded-lg px-4 py-3 ${isUser
             ? 'bg-primary text-primary-foreground'
             : 'bg-muted'
-        }`}
+          }`}
       >
         <div className="text-sm whitespace-pre-wrap">{message.content}</div>
 
