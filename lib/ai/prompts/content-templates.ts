@@ -2,6 +2,7 @@ import { ContentTemplate } from '@/types/engagement-strategies';
 import { getEngagementStrategy } from './engagement-strategies';
 import { buildPlatformContext } from './platform-psychology';
 
+/** @deprecated Source of truth moved to lib/ai/skills/social-content */
 export const PLATFORM_CONTENT_TEMPLATES: Record<string, ContentTemplate> = {
   twitter: {
     platform: 'twitter',
@@ -132,6 +133,7 @@ export const PLATFORM_CONTENT_TEMPLATES: Record<string, ContentTemplate> = {
   },
 };
 
+/** @deprecated Source of truth moved to lib/ai/skills/social-content */
 export function buildContentGenerationPrompt(
   platform: string,
   idea: { title: string; description: string; contentPillar: string; hook?: string },
@@ -298,6 +300,7 @@ function getPlatformFormattingGuide(platform: string): string {
   }
 }
 
+/** @deprecated Source of truth moved to lib/ai/skills/social-content */
 export function getContentTemplate(platform: string): ContentTemplate {
   return PLATFORM_CONTENT_TEMPLATES[platform.toLowerCase()] || PLATFORM_CONTENT_TEMPLATES.twitter;
 }

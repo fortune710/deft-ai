@@ -1,5 +1,6 @@
 import { EngagementStrategy, ContrarianAngle, ResultsFocusedFraming } from '@/types/engagement-strategies';
 
+/** @deprecated Source of truth moved to lib/ai/skills/social-content */
 export const PLATFORM_ENGAGEMENT_STRATEGIES: Record<string, EngagementStrategy> = {
   twitter: {
     platform: 'twitter',
@@ -316,6 +317,7 @@ export const PLATFORM_ENGAGEMENT_STRATEGIES: Record<string, EngagementStrategy> 
   },
 };
 
+/** @deprecated Source of truth moved to lib/ai/skills/social-content */
 export const CONTRARIAN_ANGLES: ContrarianAngle[] = [
   {
     type: 'challenge_status_quo',
@@ -351,6 +353,7 @@ export const CONTRARIAN_ANGLES: ContrarianAngle[] = [
   },
 ];
 
+/** @deprecated Source of truth moved to lib/ai/skills/social-content */
 export const RESULTS_FOCUSED_FRAMING: ResultsFocusedFraming[] = [
   {
     type: 'time_bound_transformation',
@@ -374,16 +377,19 @@ export const RESULTS_FOCUSED_FRAMING: ResultsFocusedFraming[] = [
   },
 ];
 
+/** @deprecated Source of truth moved to lib/ai/skills/social-content */
 export function getEngagementStrategy(platform: string): EngagementStrategy {
   return PLATFORM_ENGAGEMENT_STRATEGIES[platform.toLowerCase()] || PLATFORM_ENGAGEMENT_STRATEGIES['twitter'];
 }
 
+/** @deprecated Source of truth moved to lib/ai/skills/social-content */
 export function getRandomHook(platform: string): string {
   const strategy = getEngagementStrategy(platform);
   const hooks = strategy.hooks;
   return hooks[Math.floor(Math.random() * hooks.length)].template;
 }
 
+/** @deprecated Source of truth moved to lib/ai/skills/social-content */
 export function getContrarianAngle(type?: ContrarianAngle['type']): ContrarianAngle {
   if (type) {
     return CONTRARIAN_ANGLES.find(angle => angle.type === type) || CONTRARIAN_ANGLES[0];

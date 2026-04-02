@@ -1,10 +1,12 @@
 import { IdeaGeneratorAgent } from '../agents/idea-generator';
 import { ContentGeneratorAgent } from '../agents/content-generator';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { TABLES } from '@/lib/supabase/constants';
 import type { Platform, ItemStatus } from '@/types/content-engine';
 import { logger } from '@/lib/logger';
 import { AgentContext } from '@/types/ai-agents';
+import { createClient } from '@supabase/supabase-js';
+import jwt from "jsonwebtoken";
+import { createProgress, upsertProgress } from '@/lib/api/content-engine-progress';
 
 export interface OrchestratorConfig {
   userId: string;
@@ -12,18 +14,55 @@ export interface OrchestratorConfig {
   thirdPartyRuntime?: boolean;
 }
 
+function getToken(userId: string) {
+  if (!userId) {
+    throw new Error("User ID is required");
+  }
+
+  const jwtSecret = process.env.SUPABASE_JWT_SECRET!;
+  if (!jwtSecret) {
+    throw new Error("JWT secret is required");
+  }
+  const token = jwt.sign(
+    { sub: userId, role: "authenticated" },
+    jwtSecret,
+    { expiresIn: "1h", audience: "authenticated", issuer: "supabase" }
+  );
+  return token;
+}
+
 export class ContentPlanOrchestrator {
   private ideaAgent: IdeaGeneratorAgent;
   private contentAgent: ContentGeneratorAgent;
+  log = logger.child({ module: ContentPlanOrchestrator });
 
   constructor() {
     this.ideaAgent = new IdeaGeneratorAgent();
     this.contentAgent = new ContentGeneratorAgent();
   }
 
+  private createSupabaseClient(userId: string) {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+    let token = getToken(userId);
+    return createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    });
+  }
+
+
   async execute(config: OrchestratorConfig): Promise<{ message: string }> {
     const { userId, platforms, thirdPartyRuntime = false } = config;
-    const supabase = await createServerSupabaseClient();
+    const supabase = this.createSupabaseClient(userId);
 
     logger.info(`Orchestrator started for user: ${userId}`, { platforms }, thirdPartyRuntime);
 
@@ -40,6 +79,8 @@ export class ContentPlanOrchestrator {
       logger.error(msg, {}, thirdPartyRuntime);
       throw new Error(msg);
     }
+
+    this.log.info(`Profile fetched successfully for user ${userId}`, { profile }, thirdPartyRuntime);
 
     // Map profile to AgentContext
     const context: AgentContext = {
@@ -58,9 +99,18 @@ export class ContentPlanOrchestrator {
       currentAffairs: context.currentAffairsEnabled
     }, thirdPartyRuntime);
 
-    // 2. Generate Ideas (exactly 40)
-    logger.phase('idea_generation', 'Generating 40 content ideas', thirdPartyRuntime);
-    const ideaResult = await this.ideaAgent.execute(context);
+    // 2. Generate Ideas (4 in dev, 40 in prod)
+    const totalIdeasCount = process.env.NODE_ENV === 'development' ? 4 : 40;
+    logger.phase('idea_generation', `Generating ${totalIdeasCount} content ideas`, thirdPartyRuntime);
+    const ideaResult = await this.ideaAgent.execute(context, (progress) => {
+      upsertProgress(
+        supabase,
+        userId,
+        progress.progress,
+        progress.phase,
+        progress.message
+      )
+    });
     const ideas = ideaResult.ideas;
 
     if (ideas.length === 0) {
@@ -81,7 +131,7 @@ export class ContentPlanOrchestrator {
   }
 
   private async saveToDatabase(userId: string, items: any[], thirdPartyRuntime: boolean) {
-    const supabase = await createServerSupabaseClient();
+    const supabase = this.createSupabaseClient(userId);
 
     logger.info(`Saving ${items.length} items to ${TABLES.CONTENT_ITEMS}`, {}, thirdPartyRuntime);
 
@@ -107,9 +157,10 @@ export class ContentPlanOrchestrator {
         status: 'idea' as ItemStatus,
         scheduled_date: date instanceof Date ? date.toISOString().split('T')[0] : date,
         position: lastPosition + index + 1,
+        script_content: item.content, // New field
         content: {
           hook_suggestion: item.idea.hook,
-          script_content: item.content,
+          script_content: item.content, // Legacy field (keeping for compatibility)
           hashtags: item.hashtags,
           metadata: item.metadata,
         },
