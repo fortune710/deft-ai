@@ -8,8 +8,8 @@
 ALTER TABLE user_content_profile 
   ALTER COLUMN question_1_niche TYPE jsonb USING 
     CASE 
-      WHEN question_1_niche ~ '^\x20*[\{\[\"].*[\}\]\"]\x20*$' THEN question_1_niche::jsonb 
-      ELSE to_jsonb(question_1_niche) 
+      WHEN question_1_niche::text ~ '^\x20*[\{\[\"].*[\}\]\"]\x20*$' THEN question_1_niche::text::jsonb 
+      ELSE to_jsonb(question_1_niche::text) 
     END;
 
 -- Step 2: Drop unused columns from user_content_profile
