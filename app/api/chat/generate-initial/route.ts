@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { prompt, platform: platformParam } = body;
+    const { prompt, platform: platformParam, model } = body;
     platform = platformParam;
     promptLength = prompt?.length;
 
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
       .eq('user_id', user.id)
       .maybeSingle();
 
-    const result = await generateInitialScript(prompt, profile, platform);
+    const result = await generateInitialScript(prompt, profile, platform, model as any);
 
     await ScriptGeneratorServerTracking.generateInitial({
       platform,
