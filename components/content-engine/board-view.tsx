@@ -89,8 +89,6 @@ export function BoardView({ items }: BoardViewProps) {
   };
 
   const handleDelete = (itemId: string) => {
-    if (!confirm('Are you sure you want to delete this content item?')) return;
-
     deleteItem.mutate(
       { itemId },
       {

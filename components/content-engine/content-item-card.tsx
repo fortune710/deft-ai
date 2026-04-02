@@ -13,6 +13,16 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -31,7 +41,8 @@ import {
 } from '@/components/ui/popover';
 import { useUpdateContentItem } from '@/hooks/use-content-items';
 import { toast } from 'sonner';
-import type { ContentItem } from '@/types/content-engine';
+import { cn } from '@/lib/utils';
+import type { ContentItem, Platform } from '@/types/content-engine';
 
 interface ContentItemCardProps {
   item: ContentItem;
@@ -41,16 +52,16 @@ interface ContentItemCardProps {
   isDragging?: boolean;
 }
 
-const platformColors: Record<string, string> = {
-  youtube: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
-  instagram: 'bg-pink-100 text-pink-700 dark:bg-pink-900 dark:text-pink-300',
-  tiktok: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900 dark:text-cyan-300',
-  twitter: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
-  linkedin: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300',
-  facebook: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
+const platformColors: Record<Platform, string> = {
+  youtube: 'bg-red-500/10 text-red-600 border-red-500/20 dark:bg-red-500/20 dark:text-red-400',
+  instagram: 'bg-pink-500/10 text-pink-600 border-pink-500/20 dark:bg-pink-500/20 dark:text-pink-400',
+  tiktok: 'bg-cyan-500/10 text-cyan-600 border-cyan-500/20 dark:bg-cyan-500/20 dark:text-cyan-400',
+  twitter: 'bg-blue-500/10 text-blue-600 border-blue-500/20 dark:bg-blue-500/20 dark:text-blue-400',
+  linkedin: 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20 dark:bg-indigo-500/20 dark:text-indigo-400',
+  facebook: 'bg-blue-600/10 text-blue-700 border-blue-600/20 dark:bg-blue-600/20 dark:text-blue-300',
 };
 
-const platformLabels: Record<string, string> = {
+const platformLabels: Record<Platform, string> = {
   youtube: 'YouTube',
   instagram: 'Instagram',
   tiktok: 'TikTok',
@@ -68,6 +79,7 @@ export function ContentItemCard({
 }: ContentItemCardProps) {
   const router = useRouter();
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [newTitle, setNewTitle] = useState(item.title);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const updateItem = useUpdateContentItem();
@@ -82,18 +94,14 @@ export function ContentItemCard({
   const daysUntil = Math.ceil((scheduledDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 
   const handleCardClick = () => {
+    // Don't navigate if a dialog/popover is open
+    if (renameDialogOpen || deleteDialogOpen || scheduleOpen) return;
     router.push(`/script-creator/edit-content/${item.id}`);
-  };
-
-  const handleMenuEdit = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onEdit(item);
   };
 
   const handleRenameSelect = (e: Event) => {
     // Radix DropdownMenu uses `onSelect` (Event), not React.MouseEvent.
     e.preventDefault();
-    e.stopPropagation?.();
     setNewTitle(item.title);
     setRenameDialogOpen(true);
   };
@@ -123,117 +131,137 @@ export function ContentItemCard({
   };
 
   return (
-    <div
-      onClick={handleCardClick}
-      className={`group bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 shadow-sm hover:shadow-md transition-shadow cursor-pointer ${
-        isDragging ? 'opacity-50' : ''
-      }`}
-    >
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <Badge className={platformColors[item.platform] || 'bg-gray-100 text-gray-700'}>
-          {platformLabels[item.platform] || item.platform}
-        </Badge>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 opacity-0 group-hover:opacity-100"
+    <>
+      {/* Card surface — only navigates on direct click */}
+      <div
+        onClick={handleCardClick}
+        className={`group bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 shadow-sm hover:shadow-md transition-shadow cursor-pointer ${isDragging ? 'opacity-50' : ''
+          }`}
+      >
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <Badge
+            variant="outline"
+            className={cn(
+              "px-2 py-0 h-5 text-[10px] font-bold uppercase tracking-wider rounded-md border text-center flex items-center justify-center",
+              platformColors[item.platform.toLowerCase()] || 'bg-gray-100 text-gray-700'
+            )}
+          >
+            {platformLabels[item.platform] || item.platform}
+          </Badge>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 opacity-0 group-hover:opacity-100 z-10"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                }}
+              >
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              // Stop all events inside the menu from reaching the card
               onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
             >
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {/* <DropdownMenuItem onClick={handleMenuEdit}>
-              <Eye className="mr-2 h-4 w-4" />
-              View Details
-            </DropdownMenuItem> */}
-            <DropdownMenuItem onSelect={handleRenameSelect}>
-              <Edit2 className="mr-2 h-4 w-4" />
-              Rename
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={(e) => {
-                e.preventDefault();
-                e.stopPropagation?.();
-                onDuplicate(item.id);
-              }}
+              <DropdownMenuItem onSelect={handleRenameSelect}>
+                <Edit2 className="mr-2 h-4 w-4" />
+                Rename
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => onDuplicate(item.id)}
+              >
+                <Copy className="mr-2 h-4 w-4" />
+                Duplicate
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-red-600"
+                onSelect={(e) => {
+                  e.preventDefault();
+                  setDeleteDialogOpen(true);
+                }}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        <h4 className="font-medium text-sm mb-2 line-clamp-2">{item.title}</h4>
+
+        {item.description && (
+          <p className="text-xs text-gray-600 dark:text-gray-400 mb-2 line-clamp-2">
+            {item.description}
+          </p>
+        )}
+
+        <div className="flex items-center justify-between gap-2 text-xs text-gray-500 dark:text-gray-400">
+          <Popover open={scheduleOpen} onOpenChange={setScheduleOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                }}
+              >
+                <CalendarIcon className="h-3.5 w-3.5 mr-1 text-gray-400" />
+                <span>{formattedDate}</span>
+                {daysUntil >= 0 && (
+                  <span className="ml-1 text-[10px] text-gray-400">
+                    {daysUntil === 0 ? 'Today' : `${daysUntil}d`}
+                  </span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent
+              className="w-auto p-0"
+              align="start"
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
             >
-              <Copy className="mr-2 h-4 w-4" />
-              Duplicate
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="text-red-600"
-              onSelect={(e) => {
-                e.preventDefault();
-                e.stopPropagation?.();
-                onDelete(item.id);
-              }}
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <DateCalendar
+                mode="single"
+                selected={scheduledDate}
+                onSelect={(date) => {
+                  if (!date) return;
+                  updateItem.mutate(
+                    { itemId: item.id, updates: { scheduled_date: format(date, 'yyyy-MM-dd') } },
+                    {
+                      onSuccess: () => toast.success('Schedule updated'),
+                      onError: () => toast.error('Failed to update schedule'),
+                    }
+                  );
+                  setScheduleOpen(false);
+                }}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
       </div>
 
-      <h4 className="font-medium text-sm mb-2 line-clamp-2">{item.title}</h4>
+      {/* ── Dialogs rendered OUTSIDE the card div ──
+          This prevents dismiss/close events from bubbling into the card's onClick
+          and triggering navigation. It also ensures Radix can cleanly remove its
+          body pointer-events:none style without the component unmounting mid-cleanup. */}
 
-      {item.description && (
-        <p className="text-xs text-gray-600 dark:text-gray-400 mb-2 line-clamp-2">
-          {item.description}
-        </p>
-      )}
-
-      <div className="flex items-center justify-between gap-2 text-xs text-gray-500 dark:text-gray-400">
-        <Popover open={scheduleOpen} onOpenChange={setScheduleOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <CalendarIcon className="h-3.5 w-3.5 mr-1 text-gray-400" />
-              <span>{formattedDate}</span>
-              {daysUntil >= 0 && (
-                <span className="ml-1 text-[10px] text-gray-400">
-                  {daysUntil === 0 ? 'Today' : `${daysUntil}d`}
-                </span>
-              )}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start" onClick={(e) => e.stopPropagation()}>
-            <DateCalendar
-              mode="single"
-              selected={scheduledDate}
-              onSelect={(date) => {
-                if (!date) return;
-                updateItem.mutate(
-                  { itemId: item.id, updates: { scheduled_date: format(date, 'yyyy-MM-dd') } },
-                  {
-                    onSuccess: () => toast.success('Schedule updated'),
-                    onError: () => toast.error('Failed to update schedule'),
-                  }
-                );
-                setScheduleOpen(false);
-              }}
-              initialFocus
-            />
-          </PopoverContent>
-        </Popover>
-      </div>
-
-      {/* Non-modal so it won't lock pointer-events on the whole app (and avoids DnD + modal issues) */}
-      <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen} modal={false}>
-        <DialogContent
-          className="sm:max-w-[425px]"
-          // Prevent outside-click dismiss so clicks don't \"fall through\" to the card (causing navigation)
-          onInteractOutside={(e) => e.preventDefault()}
-          onPointerDownOutside={(e) => e.preventDefault()}
-        >
+      <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Rename Content Item</DialogTitle>
             <DialogDescription>
@@ -248,7 +276,6 @@ export function ContentItemCard({
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
                 onKeyDown={(e) => {
-                  // Use Cmd/Ctrl+Enter to save (Enter inserts newline in textarea)
                   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                     e.preventDefault();
                     handleRename();
@@ -281,6 +308,30 @@ export function ContentItemCard({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete your content idea.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={(e) => {
+                e.preventDefault();
+                onDelete(item.id);
+                setDeleteDialogOpen(false);
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

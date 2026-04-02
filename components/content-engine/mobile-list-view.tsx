@@ -9,11 +9,22 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ContentItemDialog } from './content-item-dialog';
 import { useDeleteContentItem, useDuplicateContentItem } from '@/hooks/use-content-items';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 import type { ContentItem, ItemStatus, Platform } from '@/types/content-engine';
 
 interface MobileListViewProps {
@@ -37,18 +48,20 @@ const platformLabels: Record<Platform, string> = {
 };
 
 const platformColors: Record<Platform, string> = {
-  youtube: 'bg-red-100 text-red-700',
-  instagram: 'bg-pink-100 text-pink-700',
-  tiktok: 'bg-cyan-100 text-cyan-700',
-  twitter: 'bg-blue-100 text-blue-700',
-  linkedin: 'bg-indigo-100 text-indigo-700',
-  facebook: 'bg-blue-100 text-blue-700',
+  youtube: 'bg-red-500/10 text-red-600 border-red-500/20',
+  instagram: 'bg-pink-500/10 text-pink-600 border-pink-500/20',
+  tiktok: 'bg-cyan-500/10 text-cyan-600 border-cyan-500/20',
+  twitter: 'bg-blue-500/10 text-blue-600 border-blue-500/20',
+  linkedin: 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20',
+  facebook: 'bg-blue-600/10 text-blue-700 border-blue-600/20',
 };
 
 export function MobileListView({ items }: MobileListViewProps) {
   const [selectedItem, setSelectedItem] = useState<ContentItem | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<Platform | 'all'>('all');
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<string | null>(null);
 
   const deleteItem = useDeleteContentItem();
   const duplicateItem = useDuplicateContentItem();
@@ -77,12 +90,21 @@ export function MobileListView({ items }: MobileListViewProps) {
   };
 
   const handleDelete = (itemId: string) => {
-    if (!confirm('Are you sure you want to delete this content item?')) return;
+    setItemToDelete(itemId);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (!itemToDelete) return;
 
     deleteItem.mutate(
-      { itemId },
+      { itemId: itemToDelete },
       {
-        onSuccess: () => toast.success('Content deleted'),
+        onSuccess: () => {
+          toast.success('Content deleted');
+          setDeleteDialogOpen(false);
+          setItemToDelete(null);
+        },
         onError: () => toast.error('Failed to delete content'),
       }
     );
@@ -160,8 +182,14 @@ export function MobileListView({ items }: MobileListViewProps) {
                                   </p>
                                 )}
                               </div>
-                              <Badge className={platformColors[item.platform as Platform]}>
-                                {platformLabels[item.platform as Platform]}
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "px-2.5 py-0.5 h-6 text-[10px] font-bold uppercase tracking-wider rounded-md border",
+                                  platformColors[item.platform] || 'bg-gray-100 text-gray-700'
+                                )}
+                              >
+                                {platformLabels[item.platform] || item.platform}
                               </Badge>
                             </div>
 
@@ -218,6 +246,29 @@ export function MobileListView({ items }: MobileListViewProps) {
         open={dialogOpen}
         onOpenChange={handleDialogClose}
       />
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete your content idea.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setItemToDelete(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 font-semibold"
+              onClick={(e) => {
+                e.preventDefault();
+                confirmDelete();
+              }}
+            >
+              {deleteItem.isPending ? 'Deleting...' : 'Delete Content'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
