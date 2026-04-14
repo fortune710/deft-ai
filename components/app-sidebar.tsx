@@ -13,6 +13,7 @@ import {
   LogOut,
   Video,
   Calendar as CalendarIcon,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import type { LucideIcon } from 'lucide-react';
@@ -62,6 +63,11 @@ const settingsItems = [
     title: 'Profile Settings',
     href: '/settings/profile',
     icon: Settings,
+  },
+  {
+    title: 'Customize',
+    href: '/customize',
+    icon: SlidersHorizontal,
   },
 ];
 
