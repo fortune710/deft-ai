@@ -135,15 +135,15 @@ export function ContentItemCard({
       {/* Card surface — only navigates on direct click */}
       <div
         onClick={handleCardClick}
-        className={`group bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 shadow-sm hover:shadow-md transition-shadow cursor-pointer ${isDragging ? 'opacity-50' : ''
+        className={`group bg-transparent rounded-xl border border-gray-100 dark:border-gray-800 p-4 shadow-none hover:border-gray-300 dark:hover:border-gray-600 transition-all cursor-pointer ${isDragging ? 'opacity-50' : ''
           }`}
       >
         <div className="flex items-start justify-between gap-2 mb-2">
           <Badge
             variant="outline"
             className={cn(
-              "px-2 py-0 h-5 text-[10px] font-bold uppercase tracking-wider rounded-md border text-center flex items-center justify-center",
-              platformColors[item.platform.toLowerCase()] || 'bg-gray-100 text-gray-700'
+              "px-2 py-0 h-5 text-[9px] font-black uppercase tracking-widest rounded-full border text-center flex items-center justify-center",
+              platformColors[item.platform.toLowerCase() as Platform] || 'bg-gray-100 text-gray-700'
             )}
           >
             {platformLabels[item.platform] || item.platform}

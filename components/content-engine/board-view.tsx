@@ -10,16 +10,18 @@ import type { ContentItem, ItemStatus } from '@/types/content-engine';
 
 interface BoardViewProps {
   items: ContentItem[];
+  searchQuery: string;
+  platformFilter: string;
 }
 
 const statusColumns: { id: ItemStatus; label: string; color: string }[] = [
-  { id: 'idea', label: 'Ideas', color: 'border-gray-300 dark:border-gray-600' },
-  { id: 'in_progress', label: 'In Progress', color: 'border-blue-300 dark:border-blue-600' },
-  { id: 'ready', label: 'Ready', color: 'border-green-300 dark:border-green-600' },
-  { id: 'published', label: 'Published', color: 'border-purple-300 dark:border-purple-600' },
+  { id: 'idea', label: 'Ideas', color: 'border-gray-200 dark:border-gray-800' },
+  { id: 'in_progress', label: 'In Progress', color: 'border-gray-200 dark:border-gray-800' },
+  { id: 'ready', label: 'Ready', color: 'border-gray-200 dark:border-gray-800' },
+  { id: 'published', label: 'Published', color: 'border-gray-200 dark:border-gray-800' },
 ];
 
-export function BoardView({ items }: BoardViewProps) {
+export function BoardView({ items, searchQuery, platformFilter }: BoardViewProps) {
   const [selectedItem, setSelectedItem] = useState<ContentItem | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -28,13 +30,28 @@ export function BoardView({ items }: BoardViewProps) {
   const duplicateItem = useDuplicateContentItem();
 
   const itemsByStatus = useMemo(() => {
+    let filtered = [...items];
+
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (item) =>
+          item.title.toLowerCase().includes(query) ||
+          item.description?.toLowerCase().includes(query)
+      );
+    }
+
+    if (platformFilter !== 'all') {
+      filtered = filtered.filter((item) => item.platform === platformFilter);
+    }
+
     return statusColumns.reduce((acc, column) => {
-      acc[column.id] = items
+      acc[column.id] = filtered
         .filter((item) => item.status === column.id)
         .sort((a, b) => a.position - b.position);
       return acc;
     }, {} as Record<ItemStatus, ContentItem[]>);
-  }, [items]);
+  }, [items, searchQuery, platformFilter]);
 
   const handleDragEnd = (result: DropResult) => {
     const { source, destination, draggableId } = result;
@@ -133,8 +150,10 @@ export function BoardView({ items }: BoardViewProps) {
                   <div
                     ref={provided.innerRef}
                     {...provided.droppableProps}
-                    className={`flex-1 space-y-3 p-3 rounded-2xl border-2 border-dashed ${column.color} ${snapshot.isDraggingOver ? 'bg-gray-50/80 dark:bg-gray-800/60' : 'bg-white/40 dark:bg-gray-900/30'
-                      } transition-colors min-h-[200px]`}
+                    className={`flex-1 space-y-3 p-3 rounded-xl border-2 border-dashed transition-all min-h-[500px] ${snapshot.isDraggingOver
+                      ? 'bg-gray-50/5 dark:bg-gray-800/10 border-gray-300 dark:border-gray-600'
+                      : 'bg-transparent border-zinc-500 dark:border-zinc-800'
+                      }`}
                   >
                     {itemsByStatus[column.id]?.map((item, index) => (
                       <Draggable key={item.id} draggableId={item.id} index={index}>
