@@ -1,14 +1,14 @@
 export class ScriptGenerationError extends Error {
     model: string;
     editRequest: string;
-    userId: string;
+    userId: string | null;
     sessionId: string;
 
     constructor(
         message: string,
         model: string,
         editRequest: string,
-        userId: string,
+        userId: string | null,
         sessionId: string
     ) {
         super(message);

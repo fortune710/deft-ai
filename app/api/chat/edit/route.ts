@@ -3,6 +3,7 @@ import { generateEditProposal } from '@/lib/ai/instant-execution-generator';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { logger } from '@/lib/logger';
 import { ScriptGenerationError } from '@/lib/errors/content-generation/scripts';
+import { TABLES } from '@/lib/supabase/constants';
 
 export async function POST(req: NextRequest) {
   const startTime = Date.now();
@@ -11,7 +12,23 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { editRequest = '', currentContent, sessionId = 'unknown', model = 'unknown' } = body;
-    let userId = body.userId || 'unknown';
+
+    const supabase = await createServerSupabaseClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      throw new ScriptGenerationError(
+        'Unauthorized' + `Status Code: 401`,
+        model,
+        editRequest,
+        null,
+        sessionId
+      );
+    }
+
+    const userId = user.id;
 
     log = log.child({ sessionId, model, userId });
     log.info('Processing edit request', { editRequestLength: editRequest?.length });
@@ -26,23 +43,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const supabase = await createServerSupabaseClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
 
-    if (!user && userId === 'unknown') {
-      throw new ScriptGenerationError(
-        'Unauthorized' + `Status Code: 401`,
-        model,
-        editRequest,
-        userId,
-        sessionId
-      );
-    }
 
     const { data: profile, error: profileError } = await supabase
-      .from('user_content_profiles')
+      .from(TABLES.USER_CONTENT_PROFILE)
       .select('*')
       .eq('user_id', userId)
       .maybeSingle();
