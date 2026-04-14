@@ -99,7 +99,7 @@ export function ChatInput({
                                             variant="ghost"
                                             size="sm"
                                             onClick={() => setSelectedModel(m.model)}
-                                            className={`justify-start ${selectedModel === m.model ? 'bg-secondary' : 'opacity-50 hover:opacity-100'}`}
+                                            className={`justify-start text-xs h-7 ${selectedModel === m.model ? 'bg-secondary' : 'opacity-50 hover:opacity-100'}`}
                                         >
                                             {m.name}
                                         </Button>

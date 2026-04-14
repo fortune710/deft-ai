@@ -39,7 +39,7 @@ export default function ProfileSettingsPage() {
   }, [isLoading, profile, router]);
 
   const renderSkeletonTextLoading = () => (
-    <div className="max-w-6xl mx-auto space-y-8 py-6 px-4 md:px-6 animate-in fade-in duration-500">
+    <div className="max-w-6xl mx-auto space-y-8 py-6 px-2 md:px-4 animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="space-y-3">
           <Skeleton className="h-10 w-64 md:w-80" />
@@ -52,8 +52,7 @@ export default function ProfileSettingsPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
-          <Card className="border-none shadow-xl bg-card overflow-hidden">
-            <div className="h-1.5 w-full bg-muted animate-pulse" />
+          <Card className="border border-border/60 shadow-sm bg-card overflow-hidden">
             <CardHeader className="pb-6 border-b border-border/40">
               <div className="flex items-center gap-4">
                 <Skeleton className="h-12 w-12 rounded-2xl" />
@@ -118,7 +117,7 @@ export default function ProfileSettingsPage() {
         </div>
 
         <div className="space-y-8">
-          <Card className="border-none shadow-xl bg-card overflow-hidden">
+          <Card className="border border-border/60 shadow-sm bg-card overflow-hidden">
             <CardHeader className="pb-6 border-b border-border/40">
               <div className="flex items-center gap-4">
                 <Skeleton className="h-10 w-10 rounded-xl" />
@@ -168,7 +167,7 @@ export default function ProfileSettingsPage() {
 
   return (
     <AppLayout>
-      <div className="max-w-6xl mx-auto space-y-8 py-6 px-4 md:px-6">
+      <div className="max-w-6xl mx-auto space-y-8 py-6 px-2 md:px-4">
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -200,12 +199,11 @@ export default function ProfileSettingsPage() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.1 }}
             >
-              <Card className="border-none shadow-2xl bg-card overflow-hidden">
-                <div className="h-1.5 w-full bg-gradient-to-r from-primary/40 via-primary to-primary/40" />
+              <Card className="border border-border/80 shadow-sm bg-card overflow-hidden relative">
                 <div className="absolute top-0 right-0 p-6 opacity-[0.03] pointer-events-none">
                   <Sparkles className="w-40 h-40" />
                 </div>
-                <CardHeader className="pb-6 border-b border-border/40 bg-muted/10">
+                <CardHeader className="pb-5 border-b border-border/40 bg-muted/5">
                   <div className="flex items-center gap-4">
                     <div className="p-3 rounded-2xl bg-primary/10 text-primary shadow-inner">
                       <Compass className="w-7 h-7" />
@@ -218,7 +216,7 @@ export default function ProfileSettingsPage() {
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="p-8 space-y-10">
+                <CardContent className="p-6 space-y-10">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="space-y-3">
                       <div className="text-[10px] font-bold text-primary uppercase tracking-[0.2em] font-lexend-deca flex items-center gap-2">
@@ -287,8 +285,8 @@ export default function ProfileSettingsPage() {
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.2 }}
               >
-                <Card className="border-none shadow-xl bg-card overflow-hidden">
-                  <CardHeader className="pb-6 border-b border-border/40 bg-muted/5">
+                <Card className="border border-border/80 shadow-sm bg-card overflow-hidden text-sm">
+                  <CardHeader className="pb-5 border-b border-border/40 bg-muted/5">
                     <div className="flex items-center gap-4">
                       <div className="p-3 rounded-2xl bg-indigo-500/10 text-indigo-500 shadow-inner">
                         <Layout className="w-7 h-7" />
@@ -301,8 +299,8 @@ export default function ProfileSettingsPage() {
                       </div>
                     </div>
                   </CardHeader>
-                  <CardContent className="p-8">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <CardContent className="p-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {contentPillars.map((pillar: string, index: number) => (
                         <div key={index} className="group flex items-start gap-4 p-5 rounded-2xl border border-border/40 bg-background hover:border-primary/40 hover:bg-primary/[0.01] hover:shadow-md transition-all duration-300">
                           <div className="h-8 w-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center text-xs font-black flex-shrink-0 group-hover:scale-110 group-hover:rotate-3 transition-all">
@@ -325,8 +323,8 @@ export default function ProfileSettingsPage() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.3 }}
             >
-              <Card className="border-none shadow-xl bg-card overflow-hidden">
-                <CardHeader className="pb-6 border-b border-border/40 bg-muted/10">
+              <Card className="border border-border/80 shadow-sm bg-card overflow-hidden">
+                <CardHeader className="pb-5 border-b border-border/40 bg-muted/5">
                   <div className="flex items-center gap-4">
                     <div className="p-3 rounded-2xl bg-blue-500/10 text-blue-500 shadow-inner">
                       <User className="w-6 h-6" />
@@ -334,69 +332,58 @@ export default function ProfileSettingsPage() {
                     <CardTitle className="text-xl font-lexend-deca tracking-tight">Creator Info</CardTitle>
                   </div>
                 </CardHeader>
-                <CardContent className="p-8 space-y-8">
+                <CardContent className="p-5 space-y-6">
                   <div className="space-y-6">
-                    <div className="space-y-2">
-                      <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.25em] font-lexend-deca">Primary Goal</div>
-                      <div className="flex items-center gap-3 text-[15px] font-bold font-alan-sans bg-muted/30 p-3.5 rounded-xl border border-border/30 shadow-sm transition-colors hover:bg-muted/40">
-                        <CheckCircle2 className="w-4.5 h-4.5 text-green-500" />
-                        {profile.question_2_goal?.replace(/_/g, ' ') || 'N/A'}
+                    <div className="grid grid-cols-1 gap-4">
+                      <div className="p-4 rounded-xl bg-muted/20 border border-border/30 transition-colors hover:bg-muted/30">
+                        <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em] font-lexend-deca mb-2">Primary Goal</div>
+                        <div className="flex items-center gap-2 text-sm font-bold font-alan-sans">
+                          <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
+                          <span className="line-clamp-1">{profile.question_2_goal?.replace(/_/g, ' ') || 'N/A'}</span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="p-4 rounded-xl bg-muted/20 border border-border/30 transition-colors hover:bg-muted/30">
+                          <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em] font-lexend-deca mb-2">Experience</div>
+                          <div className="flex items-center gap-2 text-sm font-bold font-alan-sans capitalize">
+                            <TrendingUp className="w-4 h-4 text-primary shrink-0" />
+                            <span className="truncate">{profile.question_4_experience?.replace(/_/g, ' ') || 'N/A'}</span>
+                          </div>
+                        </div>
+
+                        <div className="p-4 rounded-xl bg-muted/20 border border-border/30 transition-colors hover:bg-muted/30">
+                          <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em] font-lexend-deca mb-2">Frequency</div>
+                          <div className="flex items-center gap-2 text-sm font-bold font-alan-sans capitalize">
+                            <Radio className="w-4 h-4 text-indigo-400 shrink-0" />
+                            <span className="truncate">{profile.question_5_frequency?.replace(/_/g, ' ') || 'N/A'}</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.25em] font-lexend-deca">Experience</div>
-                      <div className="flex items-center gap-3 text-[15px] font-bold font-alan-sans bg-muted/30 p-3.5 rounded-xl border border-border/30 shadow-sm capitalize transition-colors hover:bg-muted/40">
-                        <TrendingUp className="w-4.5 h-4.5 text-primary" />
-                        {profile.question_4_experience?.replace(/_/g, ' ') || 'N/A'}
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.25em] font-lexend-deca">Post Frequency</div>
-                      <div className="flex items-center gap-3 text-[15px] font-bold font-alan-sans bg-muted/30 p-3.5 rounded-xl border border-border/30 shadow-sm capitalize transition-colors hover:bg-muted/40">
-                        <Radio className="w-4.5 h-4.5 text-indigo-400" />
-                        {profile.question_5_frequency?.replace(/_/g, ' ') || 'N/A'}
-                      </div>
-                    </div>
-
-                    <div className="space-y-2.5">
+                    <div className="space-y-3">
                       <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.25em] font-lexend-deca">Platform Stack</div>
-                      <div className="flex flex-wrap gap-2.5 pt-1">
+                      <div className="flex flex-wrap gap-2 pt-1">
                         {profile.question_3_platforms.map((platform) => (
                           <Badge
                             key={platform.name}
-                            variant={platform.isPrimary ? 'default' : 'secondary'}
+                            variant={platform.isPrimary ? 'default' : 'outline'}
                             className={cn(
-                              "rounded-lg px-3.5 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all hover:scale-105",
+                              "rounded-lg px-2.5 py-1 text-[9px] font-black uppercase tracking-widest transition-all hover:scale-105",
                               platform.isPrimary
-                                ? "bg-primary shadow-md shadow-primary/20"
-                                : "bg-muted text-muted-foreground border border-border/40"
+                                ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20 border-none"
+                                : "bg-transparent text-muted-foreground border-border/60"
                             )}
                           >
                             {platform.name}
-                            {platform.isPrimary && ' • PRIMARY'}
+                            {platform.isPrimary && ' • PRI'}
                           </Badge>
                         ))}
                       </div>
                     </div>
                   </div>
 
-                  <Separator className="bg-border/40" />
-
-                  <div className="pt-2">
-                    <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.25em] mb-4 font-lexend-deca">Profile Stats</div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="flex flex-col gap-1 p-3 rounded-xl bg-muted/20 border border-border/20">
-                        <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-tighter">Joined</span>
-                        <span className="text-xs font-bold font-alan-sans">{new Date(profile.created_at).toLocaleDateString()}</span>
-                      </div>
-                      <div className="flex flex-col gap-1 p-3 rounded-xl bg-muted/20 border border-border/20">
-                        <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-tighter">Updated</span>
-                        <span className="text-xs font-bold font-alan-sans">{new Date(profile.updated_at).toLocaleDateString()}</span>
-                      </div>
-                    </div>
-                  </div>
                 </CardContent>
               </Card>
             </motion.div>
@@ -406,7 +393,7 @@ export default function ProfileSettingsPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
-              className="p-8 rounded-[2rem] bg-gradient-to-br from-indigo-500/15 via-purple-500/5 to-transparent border border-white/10 shadow-xl relative overflow-hidden group cursor-pointer"
+              className="p-6 rounded-[1.5rem] bg-gradient-to-br from-indigo-500/10 via-purple-500/5 to-transparent border border-border/80 shadow-sm relative overflow-hidden group cursor-pointer"
               onClick={() => router.push('/regenerate-profile')}
             >
               <div className="absolute -right-8 -bottom-8 opacity-10 rotate-12 group-hover:rotate-[20deg] transition-transform duration-500">
