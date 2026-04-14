@@ -9,6 +9,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -161,7 +162,7 @@ export function GeneratePlanDialog({ open, onOpenChange, onSuccess }: GeneratePl
             Generate Content Ideas
           </DialogTitle>
           <DialogDescription>
-            AI will create a fresh batch of ideas and scripts based on your profile and preferences.
+            Create a fresh batch of ideas and scripts based on your profile and preferences.
           </DialogDescription>
         </DialogHeader>
 
@@ -274,24 +275,23 @@ export function GeneratePlanDialog({ open, onOpenChange, onSuccess }: GeneratePl
               </div>
             )}
 
-            <div className="flex gap-2">
+            <DialogFooter>
               <Button
                 type="button"
                 variant="outline"
-                className="flex-1"
+                className='h-10 px-5 rounded-lg'
                 onClick={() => onOpenChange(false)}
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
-                className="flex-1"
                 disabled={selectedPlatforms.length === 0}
+                className='h-10 px-5 rounded-lg'
               >
-                <Sparkles className="mr-2 h-4 w-4" />
-                Generate Ideas
+                Generate
               </Button>
-            </div>
+            </DialogFooter>
           </form>
         )}
       </DialogContent>

@@ -48,6 +48,7 @@ import { useDeleteContentItem, useDuplicateContentItem, useUpdateContentItem, us
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { ContentItem, ItemStatus, Platform } from '@/types/content-engine';
+import Link from 'next/link';
 
 interface ListViewProps {
   items: ContentItem[];
@@ -162,7 +163,16 @@ export function ListView({
 
   const handleDelete = (itemId: string) => {
     setItemToDelete(itemId);
-    setDeleteDialogOpen(true);
+    // Opening the dialog on the next frame avoids DropdownMenu + AlertDialog
+    // modal-layer timing conflicts that can leave the page non-interactive.
+    requestAnimationFrame(() => setDeleteDialogOpen(true));
+  };
+
+  const handleDeleteDialogOpenChange = (open: boolean) => {
+    setDeleteDialogOpen(open);
+    if (!open) {
+      setItemToDelete(null);
+    }
   };
 
   const confirmDelete = () => {
@@ -295,7 +305,7 @@ export function ListView({
                       <ScheduleDatePicker item={item} />
                     </TableCell>
                     <TableCell>
-                      <DropdownMenu>
+                      <DropdownMenu modal={false}>
                         <DropdownMenuTrigger asChild>
                           <button className="outline-none group">
                             <Badge
@@ -335,15 +345,17 @@ export function ListView({
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-32 rounded-xl">
-                          <DropdownMenuItem onClick={() => handleEdit(item)} className="cursor-pointer gap-2">
-                            <Eye className="h-3.5 w-3.5" />
-                            <span>View</span>
+                          <DropdownMenuItem asChild className="cursor-pointer gap-2 rounded-lg">
+                            <Link href={`/script-creator/edit-content/${item.id}`}>
+                              <Eye className="h-3.5 w-3.5" />
+                              <span>View</span>
+                            </Link>
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleDuplicate(item.id)} className="cursor-pointer gap-2">
+                          <DropdownMenuItem onClick={() => handleDuplicate(item.id)} className="cursor-pointer gap-2 rounded-lg">
                             <Copy className="h-3.5 w-3.5" />
                             <span>Duplicate</span>
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleDelete(item.id)} className="cursor-pointer gap-2 text-red-600 focus:text-red-600">
+                          <DropdownMenuItem onClick={() => handleDelete(item.id)} className="cursor-pointer gap-2 rounded-lg text-red-600 focus:text-red-600">
                             <Trash2 className="h-3.5 w-3.5" />
                             <span>Delete</span>
                           </DropdownMenuItem>
@@ -370,7 +382,7 @@ export function ListView({
         onOpenChange={handleDialogClose}
       />
 
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+      <AlertDialog open={deleteDialogOpen} onOpenChange={handleDeleteDialogOpenChange}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
@@ -379,7 +391,7 @@ export function ListView({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setItemToDelete(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-red-600 hover:bg-red-700 font-semibold"
               onClick={(e) => {
