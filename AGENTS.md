@@ -4,3 +4,4 @@
 3. DO NOT type tables names in raw strings for Supabase calls Always use the `TABLES` enum from `lib/supabase/constants.ts`.
 4. When updating values that will reflect in the UI, make sure to utilize optimistic updates to provide a better user experience.
 5. When calling AI models, use the Langchain library and get the model you need using the getModel function from `lib/ai/models/get-models.ts`. If the AI output is an object use the .withStructuredOutput() method to get the output in a structured format.
+6. DO NOT use string literals for localStorage keys or React Query keys. Always use the `storageKeys` object from `utils/storage-keys.ts` instead.

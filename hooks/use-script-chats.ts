@@ -11,17 +11,18 @@ import {
   updateMessageChangeStatus,
 } from '@/lib/api/script-chats';
 import type { EditorContent, EditProposal } from '@/types/script-chat';
+import { storageKeys } from '@/utils/storage-keys';
 
 export function useChatSessions() {
   return useQuery({
-    queryKey: ['script-chat-sessions'],
+    queryKey: storageKeys.reactQuery.scriptChatSessions,
     queryFn: fetchChatSessions,
   });
 }
 
 export function useSessionById(sessionId: string | undefined) {
   return useQuery({
-    queryKey: ['script-chat-session', sessionId],
+    queryKey: storageKeys.reactQuery.scriptChatSession(sessionId!),
     queryFn: () => fetchSessionById(sessionId!),
     enabled: !!sessionId,
   });
@@ -29,7 +30,7 @@ export function useSessionById(sessionId: string | undefined) {
 
 export function useSessionMessages(sessionId: string | undefined) {
   return useQuery({
-    queryKey: ['script-chat-messages', sessionId],
+    queryKey: storageKeys.reactQuery.scriptChatMessages(sessionId!),
     queryFn: () => fetchSessionMessages(sessionId!),
     enabled: !!sessionId,
   });
@@ -42,7 +43,7 @@ export function useCreateSession() {
     mutationFn: ({ title, editorContent }: { title: string; editorContent: EditorContent }) =>
       createChatSession(title, editorContent),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['script-chat-sessions'] });
+      queryClient.invalidateQueries({ queryKey: storageKeys.reactQuery.scriptChatSessions });
     },
   });
 }
@@ -54,8 +55,8 @@ export function useUpdateEditorContent() {
     mutationFn: ({ sessionId, editorContent }: { sessionId: string; editorContent: EditorContent }) =>
       updateSessionEditorContent(sessionId, editorContent),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['script-chat-session', variables.sessionId] });
-      queryClient.invalidateQueries({ queryKey: ['script-chat-sessions'] });
+      queryClient.invalidateQueries({ queryKey: storageKeys.reactQuery.scriptChatSession(variables.sessionId) });
+      queryClient.invalidateQueries({ queryKey: storageKeys.reactQuery.scriptChatSessions });
     },
   });
 }
@@ -67,8 +68,8 @@ export function useUpdateSessionTitle() {
     mutationFn: ({ sessionId, title }: { sessionId: string; title: string }) =>
       updateSessionTitle(sessionId, title),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['script-chat-session', variables.sessionId] });
-      queryClient.invalidateQueries({ queryKey: ['script-chat-sessions'] });
+      queryClient.invalidateQueries({ queryKey: storageKeys.reactQuery.scriptChatSession(variables.sessionId) });
+      queryClient.invalidateQueries({ queryKey: storageKeys.reactQuery.scriptChatSessions });
     },
   });
 }
@@ -104,8 +105,8 @@ export function useSaveMessage() {
       changeStatus?: 'pending' | 'accepted' | 'rejected';
     }) => createChatMessage(sessionId, role, messageType, content, proposedChanges, changeStatus),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['script-chat-messages', variables.sessionId] });
-      queryClient.invalidateQueries({ queryKey: ['script-chat-sessions'] });
+      queryClient.invalidateQueries({ queryKey: storageKeys.reactQuery.scriptChatMessages(variables.sessionId) });
+      queryClient.invalidateQueries({ queryKey: storageKeys.reactQuery.scriptChatSessions });
     },
   });
 }
@@ -124,7 +125,7 @@ export function useUpdateMessageStatus() {
       sessionId: string;
     }) => updateMessageChangeStatus(messageId, status),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['script-chat-messages', variables.sessionId] });
+      queryClient.invalidateQueries({ queryKey: storageKeys.reactQuery.scriptChatMessages(variables.sessionId) });
     },
   });
 }
