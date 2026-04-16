@@ -19,10 +19,17 @@ import {
     ListsToggle,
 } from '@mdxeditor/editor';
 import '@mdxeditor/editor/style.css';
+import { suggestedEditPlugin, SuggestedEditNode } from './suggested-edit-plugin';
+import { $getRoot, TextNode } from 'lexical';
+import { EditProposal } from '@/types/script-chat';
+import { logger } from '@/lib/logger';
+
+const log = logger.child({ module: 'MdxScriptEditor' });
 
 export interface MdxScriptEditorRef {
     setMarkdown: (markdown: string) => void;
     getMarkdown: () => string;
+    applyProposal: (proposal: EditProposal) => boolean;
 }
 
 interface MdxScriptEditorProps {
@@ -42,6 +49,22 @@ export const MdxScriptEditor = forwardRef<MdxScriptEditorRef, MdxScriptEditorPro
             getMarkdown: () => {
                 return editorRef.current?.getMarkdown() || '';
             },
+            applyProposal: (proposal: EditProposal, messageId?: string) => {
+                log.info('Applying proposal to editor markdown', { proposal, messageId });
+                const currentMarkdown = editorRef.current?.getMarkdown() || '';
+                
+                // Simple case: exact match
+                if (proposal.before.trim() !== '' && currentMarkdown.includes(proposal.before)) {
+                    const tag = `<suggestion before="${proposal.before.replace(/"/g, '&quot;')}" after="${proposal.after.replace(/"/g, '&quot;')}" id="${Math.random().toString()}" messageId="${messageId || ''}" />`;
+                    const nextMarkdown = currentMarkdown.replace(proposal.before, tag);
+                    editorRef.current?.setMarkdown(nextMarkdown);
+                    return true;
+                }
+                
+                // If it's an addition or we can't find the exact block, we might want to append it?
+                // But generally the AI provides a context.
+                return false;
+            }
         }));
 
         // Some aesthetics: remove basic borders, add subtle shadows, great typography
@@ -81,6 +104,7 @@ export const MdxScriptEditor = forwardRef<MdxScriptEditorRef, MdxScriptEditorPro
                                 linkPlugin(),
                                 linkDialogPlugin(),
                                 markdownShortcutPlugin(),
+                                suggestedEditPlugin(),
                                 toolbarPlugin({
                                     toolbarContents: () => (
                                         <div className="flex flex-wrap items-center gap-1 p-1 bg-muted/30 rounded-full border border-border/50 sticky top-0 z-20 backdrop-blur-md mb-8 px-4 h-11 pointer-events-auto
