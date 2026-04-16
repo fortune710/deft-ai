@@ -8,6 +8,8 @@ import { ChatInput } from './chat-input';
 import { Button } from '../ui/button';
 import { X, Loader2, Sparkles } from 'lucide-react';
 import { useSaveMessage } from '@/hooks/use-script-chats';
+import { useLocalStorage } from '@/hooks/use-local-storage';
+import { storageKeys } from '@/utils/storage-keys';
 import { toast } from 'sonner';
 import { logger } from '@/lib/logger';
 
@@ -28,8 +30,8 @@ export function ChatPanel({
   onClose,
   onContentUpdate,
 }: ChatPanelProps) {
-  const [mode, setMode] = useState<MessageType>('ask');
-  const [selectedModel, setSelectedModel] = useState<AIModelName>(AI_MODELS.GOOGLE_PRO.model);
+  const [mode, setMode] = useLocalStorage<MessageType>(storageKeys.localStorage.chatMode, 'ask');
+  const [selectedModel, setSelectedModel] = useLocalStorage<AIModelName>(storageKeys.localStorage.chatModel, AI_MODELS.GOOGLE_PRO.model);
   const [input, setInput] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
