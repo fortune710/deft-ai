@@ -19,7 +19,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import OnboardingChatInput from '../chat-input';
-import { NicheAgentQuestion, NicheAgentReasoningStep, NicheAgentStreamEvent } from '@/types/niche-agent';
+import { DetailedNiche, NicheAgentQuestion, NicheAgentReasoningStep, NicheAgentStreamEvent } from '@/types/niche-agent';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
     Dialog,
@@ -39,7 +39,9 @@ import {
 } from "@/components/ui/drawer";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { DetailedNiche } from '@/types/niche-mapping';
+import { logger } from '@/lib/logger';
+
+const log = logger.child({ module: 'components/onboarding/steps/step-1-chat-agent' });
 
 interface Step1ChatAgentProps {
     value: DetailedNiche | null;
@@ -64,6 +66,11 @@ export function Step1ChatAgent({ value, onChange, error }: Step1ChatAgentProps) 
     const [isStreaming, setIsStreaming] = useState(false);
 
     const handleStream = async (body: any) => {
+        log.debug('Starting onboarding agent stream', {
+            userId: 'resolved_by_clerk',
+            action: 'stream_niche_agent',
+            agentAction: body.action,
+        });
         setIsStreaming(true);
         // Don't clear reasoning steps if we're resuming, but clear on start
         if (body.action === 'start') {
@@ -86,6 +93,7 @@ export function Step1ChatAgent({ value, onChange, error }: Step1ChatAgentProps) 
             const realDecoder = new TextDecoder();
 
             let buffer = '';
+            let currentType: string | null = null;
 
             while (true) {
                 const { done, value } = await reader.read();
@@ -95,7 +103,6 @@ export function Step1ChatAgent({ value, onChange, error }: Step1ChatAgentProps) 
                 const lines = buffer.split('\n');
                 buffer = lines.pop() || '';
 
-                let currentType: string | null = null;
                 for (const line of lines) {
                     const trimmedLine = line.trim();
                     if (!trimmedLine) continue;
@@ -108,13 +115,23 @@ export function Step1ChatAgent({ value, onChange, error }: Step1ChatAgentProps) 
                             handleAgentEvent(currentType as any, data);
                             currentType = null; // Reset for next event
                         } catch (e) {
-                            console.error('Failed to parse SSE data:', e, trimmedLine);
+                            log.error('Failed to parse niche agent event', {
+                                userId: 'resolved_by_clerk',
+                                action: 'parse_niche_agent_event',
+                                error: e,
+                                eventLine: trimmedLine,
+                            });
                         }
                     }
                 }
             }
         } catch (err) {
-            console.error('Streaming error:', err);
+            log.error('Niche agent stream failed', {
+                userId: 'resolved_by_clerk',
+                action: 'stream_niche_agent',
+                error: err,
+                message: err instanceof Error ? err.message : String(err),
+            });
         } finally {
             setIsStreaming(false);
         }
@@ -141,7 +158,11 @@ export function Step1ChatAgent({ value, onChange, error }: Step1ChatAgentProps) 
                 ]);
                 break;
             case 'error':
-                console.error('Agent error event:', data.message);
+                log.error('Niche agent returned an error event', {
+                    userId: 'resolved_by_clerk',
+                    action: 'handle_niche_agent_error',
+                    message: data.message,
+                });
                 break;
         }
     };
@@ -287,12 +308,14 @@ export function Step1ChatAgent({ value, onChange, error }: Step1ChatAgentProps) 
 
                             <div className="space-y-6 relative px-2">
                                 <div className="absolute left-6 top-3 bottom-0 w-[1px] bg-border/40 -z-10" />
-                                <div className="flex items-center gap-3 text-xs font-bold text-muted-foreground/60 uppercase tracking-widest font-lexend-deca mb-8">
-                                    {isStreaming ? (
-                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                    ) : (
-                                        <div className="w-3.5 h-3.5 rounded-full bg-muted-foreground/20" />
-                                    )}
+                                <div className="flex items-center gap-5 text-xs font-bold text-muted-foreground/60 uppercase tracking-widest font-lexend-deca mb-8">
+                                    <div className="flex w-8 shrink-0 items-center justify-center">
+                                        {isStreaming ? (
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        ) : (
+                                            <div className="w-3.5 h-3.5 rounded-full bg-muted-foreground/20" />
+                                        )}
+                                    </div>
                                     Determining Your Niche
                                 </div>
 
@@ -417,7 +440,7 @@ export function Step1ChatAgent({ value, onChange, error }: Step1ChatAgentProps) 
                                         {currentQuestion.allowCustom && (
                                             <div
                                                 className={cn(
-                                                    "w-full flex items-start gap-3 px-3 py-2.5 rounded-xl border transition-all mt-1",
+                                                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all mt-1",
                                                     (answers[currentQuestion.id] === 'custom' || individualAnswer) ? "bg-primary/5 border-primary shadow-sm" : "bg-transparent border-transparent hover:bg-muted/30"
                                                 )}
                                                 onClick={() => {
@@ -425,7 +448,7 @@ export function Step1ChatAgent({ value, onChange, error }: Step1ChatAgentProps) 
                                                 }}
                                             >
                                                 <div className={cn(
-                                                    "w-5 h-5 mt-0.5 shrink-0 flex items-center justify-center rounded text-[10px] font-bold",
+                                                    "w-5 h-5 shrink-0 flex items-center justify-center rounded text-[10px] font-bold",
                                                     (answers[currentQuestion.id] === 'custom' || individualAnswer) ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
                                                 )}>
                                                     {String.fromCharCode(65 + currentQuestion.options.length)}
@@ -438,7 +461,7 @@ export function Step1ChatAgent({ value, onChange, error }: Step1ChatAgentProps) 
                                                             handleAnswerSelect(currentQuestion.id, 'custom');
                                                         }}
                                                         placeholder="Specify your own answer..."
-                                                        className="resize-none h-auto min-h-[25px] text-[13px] bg-transparent border-0 p-0 focus-visible:ring-0 placeholder:text-muted-foreground/50 shadow-none overflow-hidden"
+                                                        className="resize-none h-auto min-h-5 text-[13px] leading-5 bg-transparent !border-0 p-0 outline-none !ring-0 ring-offset-0 focus:border-0 focus:outline-none focus:!ring-0 focus:ring-offset-0 focus-visible:border-0 focus-visible:outline-none focus-visible:!ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground/50 !shadow-none overflow-hidden"
                                                         rows={1}
                                                         onInput={(e) => {
                                                             const target = e.target as HTMLTextAreaElement;
@@ -513,4 +536,3 @@ export function Step1ChatAgent({ value, onChange, error }: Step1ChatAgentProps) 
         </div>
     );
 }
-

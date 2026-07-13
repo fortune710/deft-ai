@@ -14,10 +14,11 @@ import {
   duplicateContentItem,
 } from '@/lib/api/content-items';
 import type { ContentItem, ItemStatus, ItemContent, Platform } from '@/types/content-engine';
+import { storageKeys } from '@/utils/storage-keys';
 
 export function useContentItem(itemId: string | null) {
   return useQuery({
-    queryKey: ['content-item', itemId],
+    queryKey: storageKeys.reactQuery.contentItem(itemId!),
     queryFn: () => (itemId ? fetchContentItem(itemId) : null),
     enabled: !!itemId,
   });
@@ -25,14 +26,14 @@ export function useContentItem(itemId: string | null) {
 
 export function useContentItems() {
   return useQuery({
-    queryKey: ['content-items'],
+    queryKey: storageKeys.reactQuery.contentItems,
     queryFn: () => fetchContentItems(),
   });
 }
 
 export function useContentItemsByStatus(status: ItemStatus) {
   return useQuery({
-    queryKey: ['content-items', 'status', status],
+    queryKey: storageKeys.reactQuery.contentItemsStatus(status),
     queryFn: () => fetchContentItemsByStatus(status),
   });
 }
@@ -42,7 +43,7 @@ export function useContentItemsByDateRange(
   endDate: string
 ) {
   return useQuery({
-    queryKey: ['content-items', 'date-range', startDate, endDate],
+    queryKey: storageKeys.reactQuery.contentItemsDateRange(startDate, endDate),
     queryFn: () => fetchContentItemsByDateRange(startDate, endDate),
   });
 }
@@ -61,7 +62,7 @@ export function useCreateContentItem() {
       position?: number;
     }) => createContentItem(item),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['content-items'] });
+      queryClient.invalidateQueries({ queryKey: storageKeys.reactQuery.contentItems });
     },
   });
 }
@@ -82,7 +83,7 @@ export function useBatchCreateContentItems() {
       }>
     ) => batchCreateContentItems(items),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['content-items'] });
+      queryClient.invalidateQueries({ queryKey: storageKeys.reactQuery.contentItems });
     },
   });
 }
@@ -99,7 +100,7 @@ export function useUpdateContentItem() {
       updates: Partial<Omit<ContentItem, 'id' | 'plan_id' | 'user_id' | 'created_at' | 'updated_at'>>;
     }) => updateContentItem(itemId, updates),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['content-items'] });
+      queryClient.invalidateQueries({ queryKey: storageKeys.reactQuery.contentItems });
     },
   });
 }
@@ -111,7 +112,7 @@ export function useUpdateItemStatus() {
     mutationFn: ({ itemId, status }: { itemId: string; status: ItemStatus }) =>
       updateItemStatus(itemId, status),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['content-items'] });
+      queryClient.invalidateQueries({ queryKey: storageKeys.reactQuery.contentItems });
     },
   });
 }
@@ -130,10 +131,10 @@ export function useUpdateItemPosition() {
       status?: ItemStatus;
     }) => updateItemPosition(itemId, position, status),
     onMutate: async ({ itemId, position, status }) => {
-      await queryClient.cancelQueries({ queryKey: ['content-items'] });
-      const previousItems = queryClient.getQueriesData({ queryKey: ['content-items'] });
+      await queryClient.cancelQueries({ queryKey: storageKeys.reactQuery.contentItems });
+      const previousItems = queryClient.getQueriesData({ queryKey: storageKeys.reactQuery.contentItems });
 
-      queryClient.setQueriesData<ContentItem[]>({ queryKey: ['content-items'] }, (old) => {
+      queryClient.setQueriesData<ContentItem[]>({ queryKey: storageKeys.reactQuery.contentItems }, (old) => {
         if (!old) return old;
         return old.map((item) => {
           if (item.id === itemId) {
@@ -157,7 +158,7 @@ export function useUpdateItemPosition() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['content-items'] });
+      queryClient.invalidateQueries({ queryKey: storageKeys.reactQuery.contentItems });
     },
   });
 }
@@ -169,7 +170,7 @@ export function useUpdateItemContent() {
     mutationFn: ({ itemId, content }: { itemId: string; content: Partial<ItemContent> }) =>
       updateItemContent(itemId, content),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['content-items'] });
+      queryClient.invalidateQueries({ queryKey: storageKeys.reactQuery.contentItems });
     },
   });
 }
@@ -181,7 +182,7 @@ export function useDeleteContentItem() {
     mutationFn: ({ itemId }: { itemId: string }) =>
       deleteContentItem(itemId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['content-items'] });
+      queryClient.invalidateQueries({ queryKey: storageKeys.reactQuery.contentItems });
     },
   });
 }
@@ -192,7 +193,7 @@ export function useDuplicateContentItem() {
   return useMutation({
     mutationFn: (itemId: string) => duplicateContentItem(itemId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['content-items'] });
+      queryClient.invalidateQueries({ queryKey: storageKeys.reactQuery.contentItems });
     },
   });
 }

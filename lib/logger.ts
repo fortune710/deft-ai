@@ -37,9 +37,20 @@ export interface AppLogger {
  * Factory to create a logger instance that handles both Pino and Trigger.dev
  */
 const createLoggerInstance = (pino: PinoLogger, bindings: any = {}): AppLogger => {
+  const formatData = (data: any) => {
+    if (data instanceof Error) {
+      return { err: data };
+    }
+    if (data && typeof data === 'object' && 'error' in data && data.error instanceof Error) {
+      return { ...data, err: data.error };
+    }
+    return data;
+  };
+
   return {
     info: (msg, data, thirdPartyRuntime = false) => {
-      const mergedData = { ...bindings, ...data };
+      const formattedData = formatData(data);
+      const mergedData = { ...bindings, ...formattedData };
       if (thirdPartyRuntime) {
         triggerLogger.info(msg, mergedData);
       } else {
@@ -47,7 +58,8 @@ const createLoggerInstance = (pino: PinoLogger, bindings: any = {}): AppLogger =
       }
     },
     warn: (msg, data, thirdPartyRuntime = false) => {
-      const mergedData = { ...bindings, ...data };
+      const formattedData = formatData(data);
+      const mergedData = { ...bindings, ...formattedData };
       if (thirdPartyRuntime) {
         triggerLogger.warn(msg, mergedData);
       } else {
@@ -55,7 +67,8 @@ const createLoggerInstance = (pino: PinoLogger, bindings: any = {}): AppLogger =
       }
     },
     error: (msg, data, thirdPartyRuntime = false) => {
-      const mergedData = { ...bindings, ...data };
+      const formattedData = formatData(data);
+      const mergedData = { ...bindings, ...formattedData };
       if (thirdPartyRuntime) {
         triggerLogger.error(msg, mergedData);
       } else {
@@ -63,9 +76,9 @@ const createLoggerInstance = (pino: PinoLogger, bindings: any = {}): AppLogger =
       }
     },
     debug: (msg, data, thirdPartyRuntime = false) => {
-      const mergedData = { ...bindings, ...data };
+      const formattedData = formatData(data);
+      const mergedData = { ...bindings, ...formattedData };
       if (thirdPartyRuntime) {
-        // Trigger.dev v3 doesn't have .debug explicitly in some versions, fallback to .log
         if (typeof (triggerLogger as any).debug === 'function') {
           (triggerLogger as any).debug(msg, mergedData);
         } else {

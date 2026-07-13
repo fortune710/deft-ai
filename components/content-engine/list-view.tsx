@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { format } from 'date-fns';
-import { Search, Eye, Copy, Trash2, Calendar as CalendarIcon } from 'lucide-react';
+import { Search, Eye, Copy, Trash2, Calendar as CalendarIcon, MoreVertical } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,6 +12,22 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   Select,
   SelectContent,
@@ -30,10 +46,20 @@ import {
 import { ContentItemDialog } from './content-item-dialog';
 import { useDeleteContentItem, useDuplicateContentItem, useUpdateContentItem, useUpdateItemStatus } from '@/hooks/use-content-items';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 import type { ContentItem, ItemStatus, Platform } from '@/types/content-engine';
+import Link from 'next/link';
 
 interface ListViewProps {
   items: ContentItem[];
+  searchQuery: string;
+  setSearchQuery: (q: string) => void;
+  statusFilter: ItemStatus | 'all';
+  setStatusFilter: (s: ItemStatus | 'all') => void;
+  platformFilter: Platform | 'all';
+  setPlatformFilter: (p: Platform | 'all') => void;
+  sortBy: 'date' | 'title' | 'platform';
+  setSortBy: (s: 'date' | 'title' | 'platform') => void;
 }
 
 const statusOptions: { value: ItemStatus | 'all'; label: string; color: string }[] = [
@@ -44,6 +70,13 @@ const statusOptions: { value: ItemStatus | 'all'; label: string; color: string }
   { value: 'published', label: 'Published', color: 'bg-purple-100 text-purple-700' },
 ];
 
+const statusDotColors: Record<string, string> = {
+  idea: 'bg-gray-500',
+  in_progress: 'bg-blue-500',
+  ready: 'bg-green-500',
+  published: 'bg-purple-500',
+};
+
 const platformLabels: Record<Platform, string> = {
   youtube: 'YouTube',
   instagram: 'Instagram',
@@ -53,13 +86,21 @@ const platformLabels: Record<Platform, string> = {
   facebook: 'Facebook',
 };
 
-export function ListView({ items }: ListViewProps) {
+export function ListView({
+  items,
+  searchQuery,
+  setSearchQuery,
+  statusFilter,
+  setStatusFilter,
+  platformFilter,
+  setPlatformFilter,
+  sortBy,
+  setSortBy
+}: ListViewProps) {
   const [selectedItem, setSelectedItem] = useState<ContentItem | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<ItemStatus | 'all'>('all');
-  const [platformFilter, setPlatformFilter] = useState<Platform | 'all'>('all');
-  const [sortBy, setSortBy] = useState<'date' | 'title' | 'platform'>('date');
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<string | null>(null);
 
   const deleteItem = useDeleteContentItem();
   const duplicateItem = useDuplicateContentItem();
@@ -121,12 +162,30 @@ export function ListView({ items }: ListViewProps) {
   };
 
   const handleDelete = (itemId: string) => {
-    if (!confirm('Are you sure you want to delete this content item?')) return;
+    setItemToDelete(itemId);
+    // Opening the dialog on the next frame avoids DropdownMenu + AlertDialog
+    // modal-layer timing conflicts that can leave the page non-interactive.
+    requestAnimationFrame(() => setDeleteDialogOpen(true));
+  };
+
+  const handleDeleteDialogOpenChange = (open: boolean) => {
+    setDeleteDialogOpen(open);
+    if (!open) {
+      setItemToDelete(null);
+    }
+  };
+
+  const confirmDelete = () => {
+    if (!itemToDelete) return;
 
     deleteItem.mutate(
-      { itemId },
+      { itemId: itemToDelete },
       {
-        onSuccess: () => toast.success('Content deleted'),
+        onSuccess: () => {
+          toast.success('Content deleted');
+          setDeleteDialogOpen(false);
+          setItemToDelete(null);
+        },
         onError: () => toast.error('Failed to delete content'),
       }
     );
@@ -172,9 +231,9 @@ export function ListView({ items }: ListViewProps) {
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 px-2 rounded-lg text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="h-8 px-2 rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"
           >
-            <CalendarIcon className="h-3.5 w-3.5 mr-1 text-slate-400" />
+            <CalendarIcon className="h-3.5 w-3.5 mr-1 text-gray-400" />
             {format(selectedDate, 'MMM d, yyyy')}
           </Button>
         </PopoverTrigger>
@@ -197,141 +256,111 @@ export function ListView({ items }: ListViewProps) {
   return (
     <>
       <div className="space-y-4">
-        <div className="flex flex-wrap gap-3 items-center rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-white/70 dark:bg-slate-900/60 px-4 py-3 shadow-sm backdrop-blur">
-          <div className="flex-1 min-w-[200px]">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="Search ideas..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 bg-transparent"
-              />
-            </div>
-          </div>
 
-          <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as ItemStatus | 'all')}>
-            <SelectTrigger className="w-[150px]">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              {statusOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={platformFilter} onValueChange={(value) => setPlatformFilter(value as Platform | 'all')}>
-            <SelectTrigger className="w-[150px]">
-              <SelectValue placeholder="Platform" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Platforms</SelectItem>
-              {platforms.map((platform) => (
-                <SelectItem key={platform} value={platform}>
-                  {platformLabels[platform]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={sortBy} onValueChange={(value) => setSortBy(value as 'date' | 'title' | 'platform')}>
-            <SelectTrigger className="w-[150px]">
-              <SelectValue placeholder="Sort by" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="date">Schedule</SelectItem>
-              <SelectItem value="title">Title</SelectItem>
-              <SelectItem value="platform">Platform</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="border border-slate-200/70 dark:border-slate-800 rounded-2xl bg-white/80 dark:bg-slate-900/60 shadow-sm overflow-hidden">
+        <div className="border border-gray-100 dark:border-gray-800 rounded-xl bg-transparent shadow-none overflow-hidden sm:overflow-auto">
           <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Title</TableHead>
-                <TableHead className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Platform</TableHead>
-                <TableHead className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Schedule</TableHead>
-                <TableHead className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Status</TableHead>
-                <TableHead className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Hook</TableHead>
-                <TableHead className="text-right text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Actions</TableHead>
+            <TableHeader className="bg-gray-50/50 dark:bg-gray-800/20 border-b border-gray-100 dark:border-gray-800">
+              <TableRow className="hover:bg-transparent border-none">
+                <TableHead className="text-[10px] h-11 uppercase tracking-widest font-bold text-gray-500 dark:text-gray-400">Title</TableHead>
+                <TableHead className="text-[10px] h-11 uppercase tracking-widest font-bold text-gray-500 dark:text-gray-400">Platform</TableHead>
+                <TableHead className="text-[10px] h-11 uppercase tracking-widest font-bold text-gray-500 dark:text-gray-400">Schedule</TableHead>
+                <TableHead className="text-[10px] h-11 uppercase tracking-widest font-bold text-gray-500 dark:text-gray-400">Status</TableHead>
+                <TableHead className="text-[10px] h-11 uppercase tracking-widest font-bold text-gray-500 dark:text-gray-400">Hook</TableHead>
+                <TableHead className="text-right text-[10px] h-11 uppercase tracking-widest font-bold text-gray-500 dark:text-gray-400 w-12"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredAndSortedItems.map((item) => {
                 const statusOption = getStatusOption(item.status);
                 return (
-                  <TableRow key={item.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/60">
-                    <TableCell className="font-medium max-w-[250px] text-slate-900 dark:text-slate-100">
+                  <TableRow
+                    key={item.id}
+                    className="hover:bg-primary/5 dark:hover:bg-primary/10 border-gray-100 dark:border-gray-800 transition-colors"
+                  >
+                    <TableCell className="font-medium max-w-[250px] text-gray-900 dark:text-gray-100">
                       <div className="line-clamp-1">{item.title}</div>
                       {item.description && (
-                        <div className="text-xs text-slate-500 dark:text-slate-400 line-clamp-1 mt-1">
+                        <div className="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-1 mt-0.5">
                           {item.description}
                         </div>
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="secondary">{platformLabels[item.platform]}</Badge>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "px-2.5 py-0.5 text-[10px] uppercase font-black tracking-widest",
+                          item.platform === 'youtube' && "bg-red-500/10 text-red-600 border-red-500/20",
+                          item.platform === 'instagram' && "bg-pink-500/10 text-pink-600 border-pink-500/20",
+                          item.platform === 'tiktok' && "bg-cyan-500/10 text-cyan-600 border-cyan-500/20",
+                          item.platform === 'twitter' && "bg-blue-500/10 text-blue-600 border-blue-500/20",
+                          item.platform === 'linkedin' && "bg-indigo-500/10 text-indigo-600 border-indigo-500/20",
+                          item.platform === 'facebook' && "bg-blue-600/10 text-blue-700 border-blue-600/20"
+                        )}
+                      >
+                        {platformLabels[item.platform] || item.platform}
+                      </Badge>
                     </TableCell>
                     <TableCell>
                       <ScheduleDatePicker item={item} />
                     </TableCell>
                     <TableCell>
-                      <Select
-                        value={item.status}
-                        onValueChange={(value) => handleStatusChange(item.id, value as ItemStatus)}
-                      >
-                        <SelectTrigger className="w-[130px]">
-                          <Badge className={statusOption?.color}>
-                            {statusOption?.label}
-                          </Badge>
-                        </SelectTrigger>
-                        <SelectContent>
+                      <DropdownMenu modal={false}>
+                        <DropdownMenuTrigger asChild>
+                          <button className="outline-none group">
+                            <Badge
+                              className={cn(
+                                "cursor-pointer transition-all hover:opacity-80 active:scale-95",
+                                statusOption?.color,
+                                "px-3 py-1.5 text-xs font-bold rounded-md border-none flex items-center gap-1.5"
+                              )}
+                            >
+                              {statusOption?.label}
+                            </Badge>
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="min-w-[140px] p-1 rounded-xl shadow-lg border-gray-200 dark:border-gray-800">
                           {statusOptions.slice(1).map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
+                            <DropdownMenuItem
+                              key={option.value}
+                              onSelect={() => handleStatusChange(item.id, option.value as ItemStatus)}
+                              className="flex items-center gap-2 px-2 py-1.5 cursor-pointer rounded-md focus:bg-gray-100 dark:focus:bg-gray-800"
+                            >
+                              <span className="text-xs font-semibold">{option.label}</span>
+                            </DropdownMenuItem>
                           ))}
-                        </SelectContent>
-                      </Select>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                     <TableCell className="max-w-[300px]">
-                      <div className="text-sm text-slate-600 dark:text-slate-300 line-clamp-2">
+                      <div className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2">
                         {item.content.hook_suggestion || 'No hook yet'}
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleEdit(item)}
-                          title="View & Edit"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDuplicate(item.id)}
-                          title="Duplicate"
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDelete(item.id)}
-                          title="Delete"
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-500">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-32 rounded-xl">
+                          <DropdownMenuItem asChild className="cursor-pointer gap-2 rounded-lg">
+                            <Link href={`/script-creator/edit-content/${item.id}`}>
+                              <Eye className="h-3.5 w-3.5" />
+                              <span>View</span>
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleDuplicate(item.id)} className="cursor-pointer gap-2 rounded-lg">
+                            <Copy className="h-3.5 w-3.5" />
+                            <span>Duplicate</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleDelete(item.id)} className="cursor-pointer gap-2 rounded-lg text-red-600 focus:text-red-600">
+                            <Trash2 className="h-3.5 w-3.5" />
+                            <span>Delete</span>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 );
@@ -352,6 +381,29 @@ export function ListView({ items }: ListViewProps) {
         open={dialogOpen}
         onOpenChange={handleDialogClose}
       />
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={handleDeleteDialogOpenChange}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete your content idea.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 font-semibold"
+              onClick={(e) => {
+                e.preventDefault();
+                confirmDelete();
+              }}
+            >
+              {deleteItem.isPending ? 'Deleting...' : 'Delete Content'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

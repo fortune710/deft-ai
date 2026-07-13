@@ -14,7 +14,7 @@ export function GeneratePlanButton({ onClick }: GeneratePlanButtonProps) {
       <Button
         onClick={onClick}
         size="lg"
-        className="hidden md:flex"
+        className="hidden md:flex md:h-10 md:px-5 md:rounded-lg"
       >
         <Sparkles className="h-4 w-4 mr-2" />
         Generate Ideas

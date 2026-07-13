@@ -37,6 +37,7 @@ export interface ContentItem {
   scheduled_date: string;
   status: ItemStatus;
   content: ItemContent;
+  script_content: string | null;
   position: number;
   created_at: string;
   updated_at: string;

@@ -17,7 +17,10 @@ export async function getCheckpointer() {
         connectionString,
         max: 20,
         idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 2000,
+        connectionTimeoutMillis: 5000, // Increased for production stability
+        ssl: {
+            rejectUnauthorized: false, // Required for most hosted Postgres providers like Supabase/Neon
+        }
     });
 
     checkpointer = new PostgresSaver(pool);

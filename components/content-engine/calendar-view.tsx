@@ -5,6 +5,7 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSam
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import {
   Popover,
   PopoverContent,
@@ -120,11 +121,10 @@ export function CalendarView({ items, planStartDate }: CalendarViewProps) {
             return (
               <div
                 key={dateKey}
-                className={`min-h-[120px] p-2 border rounded-lg ${
-                  isCurrentMonth
-                    ? 'bg-card border-border'
-                    : 'bg-muted/50 border-border/50'
-                } ${isToday ? 'ring-2 ring-primary' : ''}`}
+                className={`min-h-[120px] p-2 border rounded-lg ${isCurrentMonth
+                  ? 'bg-card border-border'
+                  : 'bg-muted/50 border-border/50'
+                  } ${isToday ? 'ring-2 ring-primary' : ''}`}
               >
                 <div className="text-sm font-medium text-foreground mb-1">
                   {format(day, 'd')}
@@ -136,17 +136,17 @@ export function CalendarView({ items, planStartDate }: CalendarViewProps) {
                       <Popover key={item.id}>
                         <PopoverTrigger asChild>
                           <button
-                            className={`w-full text-left p-1 rounded text-xs border ${
-                              statusColors[item.status]
-                            } hover:shadow-sm transition-shadow`}
+                            className={`w-full text-left p-1 rounded text-xs border ${statusColors[item.status]
+                              } hover:shadow-sm transition-shadow`}
                           >
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-2 overflow-hidden">
                               <div
-                                className={`w-2 h-2 rounded-full ${
-                                  platformColors[item.platform]
-                                }`}
+                                className={cn(
+                                  "w-2 h-2 rounded-full shrink-0",
+                                  platformColors[item.platform.toLowerCase()]
+                                )}
                               />
-                              <span className="line-clamp-1 font-semibold flex-1">{item.title}</span>
+                              <span className="line-clamp-1 font-semibold flex-1 text-[10px] truncate">{item.title}</span>
                             </div>
                           </button>
                         </PopoverTrigger>

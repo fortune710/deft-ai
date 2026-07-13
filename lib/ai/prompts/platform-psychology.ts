@@ -1,3 +1,4 @@
+/** @deprecated Source of truth moved to lib/ai/skills/social-content */
 export const PLATFORM_PSYCHOLOGY = {
   twitter: {
     algorithmPreferences: [
@@ -181,10 +182,12 @@ export const PLATFORM_PSYCHOLOGY = {
   },
 };
 
+/** @deprecated Source of truth moved to lib/ai/skills/social-content */
 export function getPlatformPsychology(platform: string) {
   return PLATFORM_PSYCHOLOGY[platform.toLowerCase() as keyof typeof PLATFORM_PSYCHOLOGY] || PLATFORM_PSYCHOLOGY.twitter;
 }
 
+/** @deprecated Source of truth moved to lib/ai/skills/social-content */
 export function buildPlatformContext(platform: string): string {
   const psychology = getPlatformPsychology(platform);
 

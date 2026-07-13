@@ -1,25 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateEditProposal } from '@/lib/ai/instant-execution-generator';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { ScriptGeneratorServerTracking } from '@/lib/posthog/server';
+import { logger } from '@/lib/logger';
+import { ScriptGenerationError } from '@/lib/errors/content-generation/scripts';
+import { TABLES } from '@/lib/supabase/constants';
 
 export async function POST(req: NextRequest) {
   const startTime = Date.now();
-  let userId: string | undefined;
-  let editRequestLength: number | undefined;
+  let log = logger.child({ endpoint: 'api/chat/edit' });
 
   try {
-    const { editRequest, currentContent } = await req.json();
-    editRequestLength = editRequest?.length;
-
-    if (!editRequest) {
-      await ScriptGeneratorServerTracking.edit({
-        status: 400,
-        error: 'Edit request is required',
-        duration: Date.now() - startTime,
-      });
-      return NextResponse.json({ error: 'Edit request is required' }, { status: 400 });
-    }
+    const body = await req.json();
+    const { editRequest = '', currentContent, sessionId = 'unknown', model = 'unknown' } = body;
 
     const supabase = await createServerSupabaseClient();
     const {
@@ -27,43 +19,92 @@ export async function POST(req: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      await ScriptGeneratorServerTracking.edit({
-        status: 401,
-        error: 'Unauthorized',
-        duration: Date.now() - startTime,
-      });
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      throw new ScriptGenerationError(
+        'Unauthorized' + `Status Code: 401`,
+        model,
+        editRequest,
+        null,
+        sessionId
+      );
     }
 
-    userId = user.id;
+    const userId = user.id;
 
-    const { data: profile } = await supabase
-      .from('user_content_profiles')
+    log = log.child({ sessionId, model, userId });
+    log.info('Processing edit request', { editRequestLength: editRequest?.length });
+
+    if (!editRequest) {
+      throw new ScriptGenerationError(
+        'Edit request is required',
+        model,
+        editRequest,
+        userId,
+        sessionId
+      );
+    }
+
+
+
+    const { data: profile, error: profileError } = await supabase
+      .from(TABLES.USER_CONTENT_PROFILE)
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .maybeSingle();
 
-    const result = await generateEditProposal(editRequest, currentContent, profile);
+    if (profileError) {
+      throw new ScriptGenerationError(
+        `Failed to fetch user profile: ${profileError.message}`,
+        model,
+        editRequest,
+        userId,
+        sessionId
+      );
+    }
 
-    await ScriptGeneratorServerTracking.edit({
-      editRequestLength,
-      userId,
-      status: 200,
-      duration: Date.now() - startTime,
+    let result;
+    try {
+      result = await generateEditProposal(editRequest, currentContent, profile, model);
+    } catch (genError) {
+      throw new ScriptGenerationError(
+        genError instanceof Error ? genError.message : 'Failed to generate edit proposal',
+        model,
+        editRequest,
+        userId,
+        sessionId
+      );
+    }
+
+    log.info('Generated edit proposal successfully', {
+      content: result.content,
+      proposedChangesCount: result.proposedChanges?.length || 0,
+      proposedChanges: result.proposedChanges,
+      duration: Date.now() - startTime
     });
 
     return NextResponse.json(result);
   } catch (error) {
-    console.error('Error generating edit proposal:', error);
-    await ScriptGeneratorServerTracking.edit({
-      editRequestLength,
-      userId,
-      status: 500,
-      error: error instanceof Error ? error.message : 'Failed to generate edit proposal',
+    if (error instanceof ScriptGenerationError) {
+      log.error('Script generation error encountered', {
+        err: error,
+        duration: Date.now() - startTime,
+        model: error.model,
+        userId: error.userId,
+        sessionId: error.sessionId,
+      });
+
+      const status = error.message === 'Edit request is required' ? 400 :
+        error.message === 'Unauthorized' ? 401 : 500;
+
+      return NextResponse.json({ error: error.message }, { status });
+    }
+
+    log.error('Unexpected error generating edit proposal', {
+      err: error instanceof Error ? error : new Error(String(error)),
       duration: Date.now() - startTime,
     });
+
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to generate edit proposal' },
+      { error: error instanceof Error ? error.message : 'Failed to process request' },
       { status: 500 }
     );
   }

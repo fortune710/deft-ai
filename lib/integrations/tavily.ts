@@ -1,6 +1,8 @@
 import { tavily } from "@tavily/core";
+import { logger } from "@/lib/logger";
 
 const TAVILY_BASE_URL = "https://api.tavily.com";
+const log = logger.child({ module: 'Tavily' });
 
 export interface TavilySearchResult {
   title: string;
@@ -54,6 +56,7 @@ export interface TavilyResearchOptions {
 function getApiKey(): string {
   const key = process.env.WEB_SEARCH_API_KEY;
   if (!key) {
+    log.error("WEB_SEARCH_API_KEY is missing in environment variables");
     throw new Error("WEB_SEARCH_API_KEY is required for Tavily");
   }
   return key;
@@ -69,17 +72,29 @@ export async function tavilySearch(
   options: TavilySearchOptions = {}
 ): Promise<TavilySearchResponse> {
   const client = getClient();
-  const response = await client.search(query, {
-    searchDepth: options.searchDepth ?? "advanced",
-    topic: options.topic ?? "news",
-    timeRange: options.timeRange ?? "week",
-    maxResults: options.maxResults ?? 5,
-    includeAnswer: options.includeAnswer ?? false,
-    //Dangerous but keeps the type-check hint away
-    includeRawContent: (options.includeRawContent ?? false) as any,
-    includeFavicon: options.includeFavicon ?? true,
-  });
-  return response as TavilySearchResponse;
+  log.info(`Executing search for query: ${query}`, { options });
+
+  try {
+    const response = await client.search(query, {
+      searchDepth: options.searchDepth ?? "advanced",
+      topic: options.topic ?? "news",
+      timeRange: options.timeRange ?? "week",
+      maxResults: options.maxResults ?? 5,
+      includeAnswer: options.includeAnswer ?? false,
+      includeRawContent: (options.includeRawContent ?? false) as any,
+      includeFavicon: options.includeFavicon ?? true,
+    });
+
+    log.info(`Search completed for: ${query}`, {
+      resultCount: response.results?.length,
+      responseTime: response.responseTime
+    });
+
+    return response as TavilySearchResponse;
+  } catch (error) {
+    log.error(`Search failed for: ${query}`, error);
+    throw error;
+  }
 }
 
 async function createResearchTask(
@@ -87,6 +102,8 @@ async function createResearchTask(
   options: TavilyResearchOptions = {}
 ): Promise<TavilyResearchResult> {
   const apiKey = getApiKey();
+  log.info(`Creating research task for: ${input.substring(0, 50)}...`, { options });
+
   const res = await fetch(`${TAVILY_BASE_URL}/research`, {
     method: "POST",
     headers: {
@@ -104,10 +121,13 @@ async function createResearchTask(
 
   if (!res.ok) {
     const text = await res.text();
+    log.error(`Failed to create research task: ${res.status}`, { response: text });
     throw new Error(`Tavily research create failed: ${res.status} ${text}`);
   }
 
-  return (await res.json()) as TavilyResearchResult;
+  const result = (await res.json()) as TavilyResearchResult;
+  log.info(`Research task created successfully`, { requestId: result.request_id });
+  return result;
 }
 
 async function getResearchTaskStatus(
@@ -122,6 +142,7 @@ async function getResearchTaskStatus(
 
   if (!res.ok) {
     const text = await res.text();
+    log.error(`Failed to get research task status: ${res.status}`, { requestId });
     throw new Error(`Tavily research status failed: ${res.status} ${text}`);
   }
 
@@ -137,16 +158,28 @@ export async function tavilyResearch(
   options: TavilyResearchOptions = {}
 ): Promise<TavilyResearchResult> {
   const task = await createResearchTask(input, options);
-  const maxPolls = options.maxPolls ?? 10;
-  const pollIntervalMs = options.pollIntervalMs ?? 1500;
+  const maxPolls = options.maxPolls ?? 15; // Increased slightly
+  const pollIntervalMs = options.pollIntervalMs ?? 2000; // Increased interval
+
+  log.info(`Starting poll for research task: ${task.request_id}`);
 
   for (let i = 0; i < maxPolls; i++) {
     const status = await getResearchTaskStatus(task.request_id);
-    if (status.status === "completed" || status.status === "failed") {
+    log.info(`Poll ${i + 1}/${maxPolls}: Status is ${status.status}`, { requestId: task.request_id });
+
+    if (status.status === "completed") {
+      log.info(`Research task completed`, { requestId: task.request_id });
       return status;
     }
+
+    if (status.status === "failed") {
+      log.error(`Research task failed according to Tavily`, { requestId: task.request_id });
+      return status;
+    }
+
     await sleep(pollIntervalMs);
   }
 
+  log.warn(`Research task timed out after ${maxPolls} polls`, { requestId: task.request_id });
   return task;
 }

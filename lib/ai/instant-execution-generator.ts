@@ -1,206 +1,272 @@
-import { createGeminiClient } from './gemini-client';
+import { z } from 'zod';
+import { getModel } from './models/get-model';
+import { AI_MODELS, AIModelName, getModelConfig } from '@/types/ai-models';
 import type { UserContentProfile } from '@/types/niche-mapping';
 import type { InstantExecutionOutput, EditProposal } from '@/types/script-chat';
+import { logger } from '@/lib/logger';
 
+/**
+ * Zod schemas for structured outputs
+ */
+const HookOptionSchema = z.object({
+  id: z.string(),
+  text: z.string().describe("First 3-5 second hook (under 10 words)"),
+  psychologyType: z.string().describe("Psychology principle (e.g., Curiosity Gap, Social Proof, Pattern Interrupt, etc.)")
+});
+
+const VisualSceneSchema = z.object({
+  timeRange: z.string(),
+  contentDescription: z.string(),
+  bRollSuggestions: z.array(z.string()),
+  onScreenText: z.array(z.string()),
+  transitionNotes: z.string().optional()
+});
+
+const InstantExecutionOutputSchema = z.object({
+  hookOptions: z.array(HookOptionSchema),
+  selectedHook: z.string(),
+  fullScript: z.string().describe("Complete script with timing markers"),
+  visualDirection: z.array(VisualSceneSchema),
+  platformMetadata: z.object({
+    captions: z.string().optional(),
+    hashtags: z.array(z.string()).optional(),
+    platformSpecificNotes: z.string().optional()
+  }),
+  thumbnailStrategy: z.object({
+    imagePrompt: z.string(),
+    overlayTextOptions: z.array(z.string())
+  }),
+  goalAlignedCTA: z.string(),
+  estimatedDuration: z.string()
+});
+
+const EditProposalSchema = z.object({
+  content: z.string().describe("A brief explanation of the proposed changes"),
+  proposedChanges: z.array(z.object({
+    section: z.string().describe("The section being edited (e.g., 'markdown', 'fullScript', 'hook')"),
+    before: z.string().describe("The original text being replaced"),
+    after: z.string().describe("The new text/content providing the complete updated script"),
+    description: z.string().describe("Why this change was made")
+  }))
+});
+
+const HookVariationSchema = z.object({
+  text: z.string(),
+  psychologyType: z.string()
+});
+
+/**
+ * Generates an initial complete video script.
+ */
 export async function generateInitialScript(
   prompt: string,
   userProfile: UserContentProfile | null,
-  platform?: string
+  platform?: string,
+  modelName: AIModelName = AI_MODELS.GOOGLE_PRO.model
 ): Promise<InstantExecutionOutput> {
-  const gemini = createGeminiClient();
+  const log = logger.child({ module: 'InstantExecutionGenerator', operation: 'generateInitialScript', model: modelName });
+  const model = getModel(getModelConfig(modelName)).withStructuredOutput(InstantExecutionOutputSchema);
 
   const systemPrompt = buildInstantExecutionPrompt(userProfile, platform);
 
-  const fullPrompt = `${systemPrompt}
-
-User Request: ${prompt}
-
-Generate a complete short-form video script with all required components. Return ONLY a valid JSON object with no additional text or markdown formatting.`;
-
-  const result = await gemini.generateContent(fullPrompt);
-  const response = result.response.text();
-
-  const cleanedResponse = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-
   try {
-    const parsed = JSON.parse(cleanedResponse);
-    return parsed as InstantExecutionOutput;
+    log.info('Generating initial script');
+    const result = await model.invoke([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: `User Request: ${prompt}` }
+    ]) as any;
+
+    return result;
   } catch (error) {
-    throw new Error(`Failed to parse AI response: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    log.error('Failed to generate initial script', error);
+    throw new Error(`Failed to generate initial script: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
+/**
+ * Generates a specific edit proposal based on user request.
+ */
 export async function generateEditProposal(
   editRequest: string,
   currentContent: any,
-  userProfile: UserContentProfile | null
+  userProfile: UserContentProfile | null,
+  modelName: AIModelName = AI_MODELS.GOOGLE_PRO.model
 ): Promise<{ content: string; proposedChanges: EditProposal[] }> {
-  const gemini = createGeminiClient();
+  const log = logger.child({ module: 'InstantExecutionGenerator', operation: 'generateEditProposal', model: modelName });
+  const model = getModel(getModelConfig(modelName)).withStructuredOutput(EditProposalSchema);
 
-  const contextPrompt = userProfile?.system_prompt || '';
+  const contextContext = buildProfileContext(userProfile);
 
-  const prompt = `You are helping edit a video script. The user wants to make changes.
+  const fullPrompt = `
+You are helping edit a video script. The user wants to make changes to their existing draft.
 
-Current Script Content:
-${JSON.stringify(currentContent, null, 2)}
+---
+CURRENT SCRIPT CONTENT:
+${typeof currentContent === 'string' ? currentContent : JSON.stringify(currentContent, null, 2)}
 
-${contextPrompt}
+---
+CONTEXT:
+${contextContext}
 
-User's Edit Request: ${editRequest}
+---
+USER'S EDIT REQUEST:
+${editRequest}
 
-Analyze the request and generate specific edit proposals. Return a JSON object with:
-{
-  "content": "A brief explanation of the proposed changes",
-  "proposedChanges": [
-    {
-      "section": "hookOptions" | "fullScript" | "visualDirection" | "thumbnailStrategy" | "platformMetadata" | "goalAlignedCTA",
-      "before": "Current text/content",
-      "after": "Proposed new text/content",
-      "description": "Why this change helps"
-    }
-  ]
-}
-
-Return ONLY valid JSON with no additional text or markdown formatting.`;
-
-  const result = await gemini.generateContent(prompt);
-  const response = result.response.text();
-
-  const cleanedResponse = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+Analyze the request and generate specific edit proposals.
+If the request is for a complete rewrite, provide the entire updated Markdown in the 'after' field.
+`.trim();
 
   try {
-    const parsed = JSON.parse(cleanedResponse);
-    return parsed;
+    log.info('Generating edit proposal');
+    const result = await model.invoke([
+      { role: 'system', content: 'You are an expert script editor.' },
+      { role: 'user', content: fullPrompt }
+    ]) as any;
+
+    return result;
   } catch (error) {
-    throw new Error(`Failed to parse edit proposal: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    log.error('Failed to generate edit proposal', error);
+    throw new Error(`Failed to generate edit proposal: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
+/**
+ * Answers questions about the script or content strategy.
+ */
 export async function generateAskResponse(
   question: string,
   currentContent: any,
-  userProfile: UserContentProfile | null
+  userProfile: UserContentProfile | null,
+  modelName: AIModelName = AI_MODELS.GOOGLE_FLASH.model
 ): Promise<string> {
-  const gemini = createGeminiClient();
+  const log = logger.child({ module: 'InstantExecutionGenerator', operation: 'generateAskResponse', model: modelName });
+  const model = getModel(getModelConfig(modelName));
 
-  const contextPrompt = userProfile?.system_prompt || '';
+  const contextContext = buildProfileContext(userProfile);
 
-  const prompt = `You are a helpful content creation assistant. The user has a question about their video script.
+  const prompt = `
+You are a helpful content creation assistant. The user has a question about their video script.
 
-Current Script Content:
-${JSON.stringify(currentContent, null, 2)}
+---
+CURRENT SCRIPT CONTENT:
+${typeof currentContent === 'string' ? currentContent : JSON.stringify(currentContent, null, 2)}
 
-${contextPrompt}
+---
+CONTEXT:
+${contextContext}
 
-User's Question: ${question}
+---
+USER'S QUESTION:
+${question}
 
-Provide a helpful, concise answer that helps them understand and improve their content. Be specific and actionable.`;
+Provide a helpful, concise, and actionable answer.
+`.trim();
 
-  const result = await gemini.generateContent(prompt);
-  return result.response.text();
+  try {
+    log.info('Generating ask response');
+    const result = await model.invoke([
+      { role: 'system', content: 'You are an expert content strategist and helper.' },
+      { role: 'user', content: prompt }
+    ]);
+
+    return typeof result.content === 'string' ? result.content : JSON.stringify(result.content);
+  } catch (error) {
+    log.error('Failed to generate ask response', error);
+    throw new Error(`Failed to generate ask response: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 }
 
+/**
+ * Regenerates a specific hook variation.
+ */
 export async function regenerateHook(
   hookIndex: number,
   currentHooks: any[],
   guidance: string,
-  userProfile: UserContentProfile | null
+  userProfile: UserContentProfile | null,
+  modelName: AIModelName = AI_MODELS.GOOGLE_FLASH.model
 ): Promise<{ text: string; psychologyType: string }> {
-  const gemini = createGeminiClient();
+  const log = logger.child({ module: 'InstantExecutionGenerator', operation: 'regenerateHook', model: modelName });
+  const model = getModel(getModelConfig(modelName)).withStructuredOutput(HookVariationSchema);
 
-  const contextPrompt = userProfile?.system_prompt || '';
+  const contextContext = buildProfileContext(userProfile);
 
-  const prompt = `You are generating a new hook variation for a video script.
+  const prompt = `
+You are generating a new hook variation for a video script.
 
-Current Hooks:
+---
+CURRENT HOOKS:
 ${JSON.stringify(currentHooks, null, 2)}
 
-${contextPrompt}
+---
+CONTEXT:
+${contextContext}
 
-User Guidance: ${guidance}
+---
+USER GUIDANCE:
+${guidance}
 
-Generate ONE new hook that is different from the existing ones. Return a JSON object:
-{
-  "text": "The hook text (under 10 words)",
-  "psychologyType": "Psychology principle used (e.g., Curiosity Gap, Social Proof, Fear of Missing Out, etc.)"
-}
-
-Return ONLY valid JSON with no additional text or markdown formatting.`;
-
-  const result = await gemini.generateContent(prompt);
-  const response = result.response.text();
-
-  const cleanedResponse = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+Generate ONE new hook that is catchy, under 10 words, and uses a different psychology principle than the existing ones.
+`.trim();
 
   try {
-    const parsed = JSON.parse(cleanedResponse);
-    return parsed;
+    log.info('Regenerating hook');
+    const result = await model.invoke([
+      { role: 'system', content: 'You are an expert at writing viral video hooks.' },
+      { role: 'user', content: prompt }
+    ]) as any;
+
+    return result;
   } catch (error) {
-    throw new Error(`Failed to parse hook: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    log.error('Failed to regenerate hook', error);
+    throw new Error(`Failed to regenerate hook: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
+/**
+ * Builds a descriptive prompt containing user niche, target audience, and goals.
+ */
 function buildInstantExecutionPrompt(
   userProfile: UserContentProfile | null,
   platform?: string
 ): string {
-  const basePrompt = userProfile?.system_prompt || '';
+  const nicheContext = buildProfileContext(userProfile);
 
-  return `${basePrompt}
+  return `
+You are an expert short-form video script generator. Your goal is to generate a complete, production-ready script that is optimized for watch-time and conversion.
 
-You are an expert short-form video script generator. Generate a complete, production-ready script for a 30-60 second video.
+---
+STRATEGY & NICHE:
+${nicheContext}
 
-Return a JSON object with this EXACT structure:
-{
-  "hookOptions": [
-    {
-      "id": "hook-1",
-      "text": "First 3-5 second hook (under 10 words)",
-      "psychologyType": "Psychology principle (e.g., Curiosity Gap, Social Proof, Pattern Interrupt, etc.)"
-    },
-    {
-      "id": "hook-2",
-      "text": "Second hook option",
-      "psychologyType": "Different psychology principle"
-    },
-    {
-      "id": "hook-3",
-      "text": "Third hook option",
-      "psychologyType": "Different psychology principle"
-    }
-  ],
-  "selectedHook": "hook-1",
-  "fullScript": "Complete 30-60 second script with timing markers. Format as:\n[0-3s] Hook line here\n[3-8s] Setup/context\n[8-15s] Main point 1\n[15-25s] Main point 2\n[25-35s] Main point 3 or payoff\n[35-40s] CTA",
-  "visualDirection": [
-    {
-      "timeRange": "0-3s",
-      "contentDescription": "What's happening in this scene",
-      "bRollSuggestions": ["Specific b-roll idea 1", "Alternative b-roll idea 2"],
-      "onScreenText": ["Text overlay 1", "Text overlay 2"],
-      "transitionNotes": "How to transition to next scene"
-    }
-  ],
-  "platformMetadata": {
-    "captions": "Optimized caption text with relevant hashtags",
-    "hashtags": ["#relevant1", "#relevant2", "#relevant3"],
-    "platformSpecificNotes": "Platform-specific tips (e.g., for TikTok: use trending sounds)"
-  },
-  "thumbnailStrategy": {
-    "imagePrompt": "Detailed description for thumbnail image generation (e.g., 'Close-up of surprised face with bright background')",
-    "overlayTextOptions": ["Short punchy text option 1", "Alternative text option 2", "Third option"]
-  },
-  "goalAlignedCTA": "Specific call-to-action aligned with user's goal: ${userProfile?.question_2_goal || 'engagement'}",
-  "estimatedDuration": "35 seconds"
+${platform ? `TARGET PLATFORM: ${platform}` : ''}
+
+INSTRUCTIONS:
+1.  **High-Energy Hooks**: The first 3 seconds are crucial. Generate high-impact hook variations.
+2.  **Fast-Paced Structure**: Keep things moving with timing markers for every few seconds.
+3.  **Visual Direction**: Provide clear instructions for what should be on screen (Action, B-roll, Text Overlays).
+4.  **Goal Alignment**: Ensure the Call-to-Action directly serves the user's primary goal.
+
+Return a complete structured output.
+`.trim();
 }
 
-${platform ? `Target Platform: ${platform}` : ''}
+/**
+ * Extracts niche and strategy details from the user profile.
+ */
+function buildProfileContext(userProfile: UserContentProfile | null): string {
+  if (!userProfile) return "No specific user context provided.";
 
-Make the script:
-- Attention-grabbing from second 1
-- Fast-paced and engaging
-- Optimized for watch-through rate
-- Actionable and valuable
-- Aligned with the user's content goals and niche
+  const niche = userProfile.question_1_niche;
+  if (!niche) return "User is in the discovery phase. Stick to general best practices.";
 
-Return ONLY the JSON object, no markdown formatting, no additional text.`;
+  return `
+Niche: ${niche.niche}
+Sub-niche: ${niche.subNiche}
+Target Audience: ${niche.targetAudience}
+Content Tone: ${niche.tone}
+Content Pillars: ${niche.contentPillars?.join(', ')}
+User Goal: ${userProfile.question_2_goal || 'Growth'}
+Experience Level: ${userProfile.question_4_experience || 'Not specified'}
+`.trim();
 }

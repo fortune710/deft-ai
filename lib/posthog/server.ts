@@ -12,7 +12,7 @@ export function getPostHogServer(): PostHog | null {
   }
 
 
-  const client = new PostHog(posthogKey,{
+  const client = new PostHog(posthogKey, {
     host: posthogHost
   });
 
@@ -29,7 +29,7 @@ export async function trackServerEvent(
   userId?: string
 ) {
 
-  const client  = getPostHogServer();
+  const client = getPostHogServer();
 
   client?.capture({
     event: eventName,
@@ -65,7 +65,7 @@ export async function trackAPIRequest(
 }
 
 export function trackServerError(error: Error, properties?: Record<string, any>, userId?: string) {
-  const client  = getPostHogServer();
+  const client = getPostHogServer();
   client?.captureException(error, userId, properties);
 }
 
@@ -86,6 +86,7 @@ export const ScriptGeneratorServerTracking = {
   ask: async (properties?: {
     questionLength?: number;
     userId?: string;
+    model?: string;
     status?: number;
     error?: string;
     duration?: number;
@@ -95,6 +96,7 @@ export const ScriptGeneratorServerTracking = {
   edit: async (properties?: {
     editRequestLength?: number;
     userId?: string;
+    model?: string;
     status?: number;
     error?: string;
     duration?: number;

@@ -2,20 +2,25 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { ChatMessage as ChatMessageType, EditorContent, MessageType } from '@/types/script-chat';
+import { AI_MODELS, AIModelName } from '@/types/ai-models';
 import { ChatMessage } from './chat-message';
-import { ModeSelector } from './mode-selector';
+import { ChatInput } from './chat-input';
 import { Button } from '../ui/button';
-import { Textarea } from '../ui/textarea';
-import { X, Send, Loader2 } from 'lucide-react';
+import { X, Loader2, Sparkles } from 'lucide-react';
 import { useSaveMessage } from '@/hooks/use-script-chats';
+import { useLocalStorage } from '@/hooks/use-local-storage';
+import { storageKeys } from '@/utils/storage-keys';
 import { toast } from 'sonner';
+import { logger } from '@/lib/logger';
+
+const log = logger.child({ component: 'ChatPanel' });
 
 interface ChatPanelProps {
   sessionId: string;
   messages: ChatMessageType[];
-  editorContent: EditorContent;
+  editorContent: EditorContent | string;
   onClose: () => void;
-  onContentUpdate: (content: EditorContent) => void;
+  onContentUpdate: (content: any) => void;
 }
 
 export function ChatPanel({
@@ -25,7 +30,8 @@ export function ChatPanel({
   onClose,
   onContentUpdate,
 }: ChatPanelProps) {
-  const [mode, setMode] = useState<MessageType>('ask');
+  const [mode, setMode] = useLocalStorage<MessageType>(storageKeys.localStorage.chatMode, 'ask');
+  const [selectedModel, setSelectedModel] = useLocalStorage<AIModelName>(storageKeys.localStorage.chatModel, AI_MODELS.GOOGLE_PRO.model);
   const [input, setInput] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -38,11 +44,13 @@ export function ChatPanel({
   const handleSend = async () => {
     if (!input.trim() || isGenerating) return;
 
+    const sessionLog = log.child({ sessionId });
     const userMessage = input.trim();
     setInput('');
     setIsGenerating(true);
 
     try {
+      sessionLog.info('User sent message', { mode, model: selectedModel });
       await saveMessage.mutateAsync({
         sessionId,
         role: 'user',
@@ -51,18 +59,22 @@ export function ChatPanel({
       });
 
       if (mode === 'ask') {
+        sessionLog.info('Calling /api/chat/ask');
         const response = await fetch('/api/chat/ask', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             question: userMessage,
             currentContent: editorContent,
+            sessionId,
+            model: selectedModel,
           }),
         });
 
         if (!response.ok) throw new Error('Failed to get response');
 
         const data = await response.json();
+        sessionLog.info('Received ask response');
 
         await saveMessage.mutateAsync({
           sessionId,
@@ -71,18 +83,25 @@ export function ChatPanel({
           content: data.response,
         });
       } else {
+        sessionLog.info('Calling /api/chat/edit');
         const response = await fetch('/api/chat/edit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             editRequest: userMessage,
             currentContent: editorContent,
+            sessionId,
+            model: selectedModel,
           }),
         });
 
         if (!response.ok) throw new Error('Failed to generate edit');
 
         const data = await response.json();
+        sessionLog.info('Received edit proposal', {
+          content: data.content,
+          proposedChanges: data.proposedChanges
+        });
 
         await saveMessage.mutateAsync({
           sessionId,
@@ -94,39 +113,26 @@ export function ChatPanel({
         });
       }
     } catch (error) {
+      sessionLog.error('Error in handleSend', error);
       toast.error('Failed to send message');
       console.error(error);
     } finally {
       setIsGenerating(false);
     }
   };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-
   return (
-    <div className="flex flex-col h-full bg-background">
-      <div className="border-b px-4 py-3 flex items-center justify-between shrink-0">
-        <div>
-          <h3 className="font-semibold">Chat Assistant</h3>
-          <p className="text-xs text-muted-foreground">
-            {mode === 'ask' ? 'Ask questions' : 'Request edits'}
-          </p>
+    <div className="flex flex-col h-full bg-background relative overflow-hidden">
+      <div className="border-b px-4 py-1.5 flex items-center justify-between shrink-0 bg-background/95 backdrop-blur z-10 sticky top-0">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-primary" />
+          <h3 className="font-semibold text-sm">Assistant</h3>
         </div>
-        <Button variant="ghost" size="icon" onClick={onClose} className="md:hidden">
-          <X className="h-5 w-5" />
+        <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8 rounded-full">
+          <X className="h-4 w-4" />
         </Button>
       </div>
 
-      <div className="px-4 py-3 border-b shrink-0">
-        <ModeSelector mode={mode} onModeChange={setMode} />
-      </div>
-
-      <div className="flex-1 overflow-auto px-4 py-4 space-y-4">
+      <div className="flex-1 overflow-auto px-4 py-4 space-y-4 custom-scrollbar pb-32">
         {messages.length === 0 ? (
           <div className="text-center text-muted-foreground text-sm py-8">
             <p className="mb-2">Start a conversation</p>
@@ -156,27 +162,16 @@ export function ChatPanel({
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="border-t p-4 shrink-0">
-        <div className="space-y-2">
-          <Textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={
-              mode === 'ask'
-                ? 'Ask a question... (Cmd/Ctrl+Enter to send)'
-                : 'Describe the edit you want... (Cmd/Ctrl+Enter to send)'
-            }
-            rows={3}
-            disabled={isGenerating}
-            className="resize-none"
-          />
-          <Button onClick={handleSend} disabled={!input.trim() || isGenerating} className="w-full">
-            <Send className="h-4 w-4 mr-2" />
-            Send
-          </Button>
-        </div>
-      </div>
+      <ChatInput
+        input={input}
+        setInput={setInput}
+        handleSend={handleSend}
+        isGenerating={isGenerating}
+        mode={mode}
+        setMode={setMode}
+        selectedModel={selectedModel}
+        setSelectedModel={setSelectedModel}
+      />
     </div>
   );
 }

@@ -1,10 +1,12 @@
 import { Agent, AgentContext, IdeaGeneratorResult, ContentIdea, ProgressCallback } from '@/types/ai-agents';
 import { AI_MODELS, AIModelConfig } from '@/types/ai-models';
-import { getModel } from '../models/get-model';
-import { buildIdeaGenerationPrompt } from '../prompts/idea-generation-advanced';
+import { getModel } from '@/lib/ai/models/get-model';
+import { buildIdeaGenerationPrompt } from '@/lib/ai/prompts/idea-generation-advanced';
 import { tavilySearch } from '@/lib/integrations/tavily';
 import { z } from "zod";
 import { logger } from '@/lib/logger';
+import { getModelForPlatform } from '@/lib/ai/utils/content-generator-utils';
+import { getSocialContentExpertPersona, getPlatformQuickReference } from '@/lib/ai/skills/social-content';
 
 // Define the schema for structured idea generation
 const IdeasOutputSchema = z.object({
@@ -25,21 +27,14 @@ const IdeasOutputSchema = z.object({
 export class IdeaGeneratorAgent implements Agent {
   name = 'Idea Generator';
   description = 'Generates scroll-stopping content ideas using contrarian, results-focused, pain point, and transformation strategies';
-  modelConfig: AIModelConfig = AI_MODELS.GOOGLE_FLASH;
-
-  private getModelForPlatform(platform: string): AIModelConfig {
-    const platformLower = platform.toLowerCase();
-    if (platformLower === 'twitter' || platformLower === 'linkedin') {
-      return AI_MODELS.GROK_REASONING;
-    }
-    return this.modelConfig;
-  }
+  modelConfig: AIModelConfig = AI_MODELS.GROK_REASONING;
+  log = logger.child({ module: IdeaGeneratorAgent });
 
   async execute(context: AgentContext, onProgress?: ProgressCallback): Promise<IdeaGeneratorResult> {
     const { niche: strategy, platforms, currentAffairsEnabled, thirdPartyRuntime } = context;
     const { niche, subNiche, targetAudience, contentPillars, tone } = strategy;
 
-    logger.info(`Starting idea generation for niche: ${niche}`, {
+    this.log.info(`Starting idea generation for niche: ${niche}`, {
       subNiche,
       platforms,
       pillars: contentPillars
@@ -52,14 +47,17 @@ export class IdeaGeneratorAgent implements Agent {
       'transformation',
     ];
 
+    const isDev = process.env.NODE_ENV === 'development';
+    const totalIdeasCount = isDev ? 8 : 40;
+    const strategiesCount = strategies.length;
+    const ideasPerStrategy = Math.floor(totalIdeasCount / strategiesCount);
     const allIdeas: ContentIdea[] = [];
-    const ideasPerStrategy = 10; // 10 per strategy = 40 total
 
     onProgress?.({
       phase: 'idea_generation',
       progress: 0,
       message: 'Starting idea generation',
-      details: 'Preparing to generate 40 content ideas',
+      details: `Preparing to generate ${totalIdeasCount} content ideas`,
     });
 
     const currentAffairsBriefing = currentAffairsEnabled
@@ -93,29 +91,21 @@ export class IdeaGeneratorAgent implements Agent {
             currentAffairsBriefing,
           });
 
-          const modelToUse = this.getModelForPlatform(platform);
+          const modelToUse = getModelForPlatform(platform, this.modelConfig);
           const model = getModel(modelToUse);
           const structuredModel = model.withStructuredOutput(IdeasOutputSchema);
 
           const result = await structuredModel.invoke([
             {
               role: 'system',
-              content: `You are an expert content strategist and viral growth expert. 
+              content: `
+${getSocialContentExpertPersona()}
+
+${getPlatformQuickReference()}
+
 Your goal is to generate scroll-stopping content ideas for a creator with the following tone: ${tone}.
-
-<expertise>
-- Master of psychological triggers (curiosity, fear of missing out, desire for status)
-- Expert in platform-specific algorithms (TikTok, Instagram, YouTube, LinkedIn)
-- Specialist in "Hook-Story-Offer" framework
-- Advanced understanding of niche-specific pain points and transformations
-</expertise>
-
-<constraints>
-- Ideas must be highly specific, not generic
-- Titles must be attention-grabbing but not clickbait (deliver on the promise)
-- Keep descriptions concise but actionable
-- Ensure a mix of formats (educational, entertaining, promotional)
-</constraints>`
+Generate ideas matching the specific platform requirements and frequency guidelines.
+`.trim()
             },
             { role: 'user', content: prompt }
           ]);
@@ -128,7 +118,7 @@ Your goal is to generate scroll-stopping content ideas for a creator with the fo
 
           allIdeas.push(...ideas);
 
-          logger.info(`Generated ${ideas.length} ideas for ${platform} (${strategyName})`, {}, thirdPartyRuntime);
+          this.log.info(`Generated ${ideas.length} ideas for ${platform} (${strategyName})`, {}, thirdPartyRuntime);
 
           onProgress?.({
             phase: 'idea_generation',
@@ -137,14 +127,14 @@ Your goal is to generate scroll-stopping content ideas for a creator with the fo
             details: `${strategyName} strategy for ${platform}`,
           });
         } catch (error) {
-          logger.error(`Error generating ideas for ${platform} with ${strategyName} strategy`, error, thirdPartyRuntime);
+          this.log.error(`Error generating ideas for ${platform} with ${strategyName} strategy`, error, thirdPartyRuntime);
         }
       }
     }
 
     const platformDistribution = this.calculatePlatformDistribution(allIdeas);
 
-    logger.info('Idea generation complete', {
+    this.log.info('Idea generation complete', {
       totalGenerated: allIdeas.length,
       distribution: platformDistribution
     }, thirdPartyRuntime);
@@ -184,13 +174,14 @@ Your goal is to generate scroll-stopping content ideas for a creator with the fo
       details: 'Gathering topical signals for idea generation',
     });
 
-    logger.phase('research', `Scanning news for niche: ${niche}`, thirdPartyRuntime);
+    this.log.phase('research', `Scanning news for niche: ${niche}`, thirdPartyRuntime);
 
     const queries = this.buildCurrentAffairsQueries(niche, contentPillars);
 
     const results = await Promise.all(
       queries.map(async (query) => {
         try {
+          this.log.info(`Executing news search: ${query}`, {}, thirdPartyRuntime);
           const response = await tavilySearch(query, {
             searchDepth: 'advanced',
             topic: 'news',
@@ -199,12 +190,15 @@ Your goal is to generate scroll-stopping content ideas for a creator with the fo
             includeAnswer: false,
             includeRawContent: false,
           });
+
+          this.log.info(`News search success: ${query}`, { resultCount: response.results?.length }, thirdPartyRuntime);
+
           return {
             query,
             results: response.results || [],
           };
         } catch (error) {
-          logger.warn(`Tavily search failed for query: ${query}`, error, thirdPartyRuntime);
+          this.log.warn(`Tavily search failed for query: ${query}`, error, thirdPartyRuntime);
           return { query, results: [] as any[] };
         }
       })
@@ -221,12 +215,19 @@ Your goal is to generate scroll-stopping content ideas for a creator with the fo
       });
     }
 
-    return lines.join('\n');
+    const briefing = lines.join('\n');
+    this.log.info('Current affairs briefing prepared', {
+      queryCount: queries.length,
+      briefingSize: briefing.length
+    }, thirdPartyRuntime);
+
+    return briefing;
   }
 
   private buildCurrentAffairsQueries(niche: string, contentPillars: string[]): string[] {
     const queries: string[] = [];
     queries.push(`latest news in ${niche}`);
+    this.log.info(`Generated ${queries.length} queries for ${contentPillars} (${niche})`);
     const pillarQueries = contentPillars.slice(0, 2).map((pillar) => `${pillar} ${niche} news`);
     queries.push(...pillarQueries);
     return queries;

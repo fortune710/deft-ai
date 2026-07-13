@@ -150,11 +150,6 @@ export async function createChatMessage(
     throw new Error(`Failed to create message: ${error.message}`);
   }
 
-  await supabase
-    .from('script_chat_sessions')
-    .update({ updated_at: new Date().toISOString() })
-    .eq('id', sessionId);
-
   return data as ChatMessage;
 }
 
