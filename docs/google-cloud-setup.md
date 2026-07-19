@@ -73,34 +73,16 @@ GOOGLE_CLOUD_CLIENT_EMAIL=your-service-account@project-id.iam.gserviceaccount.co
 GOOGLE_CLOUD_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
 ```
 
-## Step 7: Set Up Supabase Storage
+## Step 7: Set Up Convex Storage
 
-### Create Storage Bucket
+No bucket provisioning is required. Convex Storage is enabled with the deployment and files are stored using storage IDs.
 
-1. Go to your Supabase project dashboard
-2. Navigate to "Storage" in the left sidebar
-3. Click "Create a new bucket"
-4. Name the bucket: `temp-videos`
-5. Set the bucket to **Public** (required for processing)
-6. Click "Create bucket"
+1. Configure `NEXT_PUBLIC_CONVEX_URL` for the deployment.
+2. Configure `TRIGGER_CONVEX_SECRET` in both Convex and Trigger.dev.
+3. Client uploads obtain an upload URL from `convex/fileStorage.ts`.
+4. Trigger workers use `convex/triggerWorkers.ts` to resolve and delete stored files.
 
-### Create Folders
-
-1. Inside the `temp-videos` bucket, create two folders:
-   - `videos/` - for storing downloaded video files
-   - `audio/` - for storing extracted audio files
-
-### Configure Bucket Policies (Optional)
-
-You can set up automatic deletion policies using Supabase Edge Functions or external cron jobs:
-
-```sql
--- Example: List expired videos for cleanup
-SELECT id, video_file_path, audio_file_path
-FROM video_analytics
-WHERE expires_at < NOW()
-  AND (video_file_path IS NOT NULL OR audio_file_path IS NOT NULL);
-```
+Convex Storage does not use public folders. Access is controlled through authenticated Convex functions, and cleanup should delete the associated `_storage` IDs.
 
 ## Step 8: Test Your Setup
 
@@ -131,10 +113,10 @@ If you hit quota limits:
 ### Storage Errors
 
 If video/audio upload fails:
-- Verify the `temp-videos` bucket exists in Supabase
-- Check that the bucket is set to Public
-- Ensure the `videos/` and `audio/` folders exist
-- Verify your Supabase service role key is correct in `.env`
+- Verify `NEXT_PUBLIC_CONVEX_URL` points to the active deployment
+- Verify Clerk authentication is configured in `convex/auth.config.ts`
+- Verify `TRIGGER_CONVEX_SECRET` matches in Convex and Trigger.dev
+- Check the `fileStorage` and `triggerWorkers` function logs
 
 ## Cost Estimation
 
@@ -162,4 +144,4 @@ For typical usage (1-5 minute videos):
 
 - [Google Cloud Speech-to-Text Documentation](https://cloud.google.com/speech-to-text/docs)
 - [Service Account Best Practices](https://cloud.google.com/iam/docs/best-practices-for-using-service-accounts)
-- [Supabase Storage Documentation](https://supabase.com/docs/guides/storage)
+- [Convex File Storage Documentation](https://docs.convex.dev/file-storage)
