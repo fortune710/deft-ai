@@ -1,11 +1,17 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { PLATFORM_OPTIONS } from '@/lib/validations/onboarding/options';
-import { Platform } from '@/types/niche-mapping';
-import { Music, Instagram, Youtube, Twitter, Linkedin } from 'lucide-react';
+import { Check, Instagram, Linkedin, Music, Twitter, Youtube } from 'lucide-react';
+
+import { OnboardingOptionRow, OnboardingStepCard, OnboardingStepFooter } from '@/components/onboarding/step-ui';
+import { reducedStepTransition, reducedStepVariants, stepTransition, stepVariants } from '@/components/onboarding/motion';
+import { useAuth } from '@/hooks/use-clerk-auth';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
+import { logger } from '@/lib/logger';
+import { PLATFORM_OPTIONS } from '@/lib/validations/onboarding/options';
+import type { Platform } from '@/types/niche-mapping';
+
+const log = logger.child({ module: 'components/onboarding/steps/step-3-platforms' });
 
 const PLATFORM_ICONS = {
   tiktok: Music,
@@ -21,149 +27,83 @@ interface Step3PlatformsProps {
   onBack: () => void;
   onNext: () => void;
   error?: string;
+  direction: number;
+  shouldReduceMotion: boolean;
 }
 
-export function Step3Platforms({ value, onChange, onBack, onNext, error }: Step3PlatformsProps) {
+export function Step3Platforms({ value, onChange, onBack, onNext, error, direction, shouldReduceMotion }: Step3PlatformsProps) {
+  const { userId } = useAuth();
+  const selectedPlatforms = value.map((platform) => platform.name);
+
+  log.debug('Rendering platform selection step', {
+    userId: userId || 'signed_out',
+    action: 'render_onboarding_platform_step',
+    selectedCount: selectedPlatforms.length,
+  });
+
   const handlePlatformToggle = (platformValue: string) => {
-    const exists = value.find((p) => p.name === platformValue);
-    if (exists) {
-      onChange(value.filter((p) => p.name !== platformValue));
-    } else {
-      onChange([...value, { name: platformValue, isPrimary: value.length === 0 }]);
-    }
+    const exists = value.some((platform) => platform.name === platformValue);
+    const nextValue = exists
+      ? value.filter((platform) => platform.name !== platformValue)
+      : [...value, { name: platformValue, isPrimary: value.length === 0 }];
+
+    log.info('Toggled onboarding platform', {
+      userId: userId || 'signed_out',
+      action: 'toggle_onboarding_platform',
+      platform: platformValue,
+      selected: !exists,
+    });
+    onChange(nextValue);
   };
 
   const handlePrimaryChange = (platformValue: string) => {
-    onChange(
-      value.map((p) => ({
-        ...p,
-        isPrimary: p.name === platformValue,
-      }))
-    );
+    log.info('Changed primary onboarding platform', {
+      userId: userId || 'signed_out',
+      action: 'change_primary_onboarding_platform',
+      platform: platformValue,
+    });
+    onChange(value.map((platform) => ({ ...platform, isPrimary: platform.name === platformValue })));
   };
 
-  const selectedPlatforms = value.map((p) => p.name);
-  const primaryPlatform = value.find((p) => p.isPrimary)?.name;
-
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      className="w-full max-w-xl mx-auto mt-4"
-    >
-      <div className="border border-border/40 rounded-2xl bg-background/50 backdrop-blur-sm p-5 md:p-6 shadow-sm overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center gap-2 text-muted-foreground mb-6 text-sm font-medium">
-          <Instagram className="w-4 h-4" />
-          <span>Platform Presence</span>
-          <div className="ml-auto text-xs opacity-60 font-mono tracking-tight">Step 3 / 5</div>
+    <motion.div custom={direction} variants={shouldReduceMotion ? reducedStepVariants : stepVariants} initial="enter" animate="center" exit="exit" transition={shouldReduceMotion ? reducedStepTransition : stepTransition} className="mx-auto mt-4 w-full max-w-xl">
+      <OnboardingStepCard icon={Instagram} eyebrow="Platform presence" title="Where are you posting content first?" description="Select every platform you use, then choose the one that deserves your primary focus.">
+        <div className="space-y-2">
+          {PLATFORM_OPTIONS.map((option) => (
+            <OnboardingOptionRow key={option.value} icon={PLATFORM_ICONS[option.value as keyof typeof PLATFORM_ICONS]} label={option.label} selected={selectedPlatforms.includes(option.value)} onClick={() => handlePlatformToggle(option.value)} />
+          ))}
         </div>
 
-        <div className="space-y-4">
-          <div className="space-y-1">
-            <h3 className="text-sm md:text-base font-semibold text-foreground leading-snug">
-              Where are you posting content first?
-            </h3>
-            <p className="text-xs text-muted-foreground">
-              Select all that apply, then mark which one is your primary focus.
-            </p>
-          </div>
-
-          <div className="space-y-1.5 pb-2">
-            {PLATFORM_OPTIONS.map((option) => {
-              const Icon = PLATFORM_ICONS[option.value as keyof typeof PLATFORM_ICONS];
-              const isSelected = selectedPlatforms.includes(option.value);
-
-              return (
-                <button
-                  key={option.value}
-                  onClick={() => handlePlatformToggle(option.value)}
-                  className={cn(
-                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-all duration-200 group",
-                    isSelected
-                      ? "bg-primary/5 border-primary shadow-sm"
-                      : "bg-transparent border-transparent hover:bg-muted/30"
-                  )}
-                >
-                  <div className={cn(
-                    "w-8 h-8 shrink-0 flex items-center justify-center rounded-lg transition-all duration-500",
-                    isSelected
-                      ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
-                      : "bg-muted text-muted-foreground/60 group-hover:bg-muted/30"
-                  )}>
-                    <Icon className="w-4 h-4" />
-                  </div>
-                  <span className={cn(
-                    "text-[13px] font-medium transition-colors flex-1",
-                    isSelected ? "text-foreground" : "text-muted-foreground"
-                  )}>
+        {value.length > 0 && (
+          <div className="mt-6 border-t border-border/50 pt-5">
+            <p className="mb-3 text-xs font-semibold tracking-[0.08em] text-muted-foreground">PRIMARY FOCUS</p>
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Primary platform">
+              {value.map((platform) => {
+                const option = PLATFORM_OPTIONS.find((candidate) => candidate.value === platform.name);
+                if (!option) return null;
+                return (
+                  <button
+                    key={platform.name}
+                    type="button"
+                    aria-pressed={platform.isPrimary}
+                    onClick={() => handlePrimaryChange(platform.name)}
+                    className={cn(
+                      'flex min-h-11 items-center gap-2 rounded-full border px-4 text-sm font-semibold outline-none transition-[background-color,border-color,color,box-shadow,transform] duration-200 [transition-timing-function:cubic-bezier(0.23,1,0.32,1)] active:scale-[0.98] motion-reduce:transform-none focus-visible:ring-3 focus-visible:ring-ring/40',
+                      platform.isPrimary ? 'border-primary bg-primary text-primary-foreground shadow-md shadow-primary/20' : 'border-border/70 bg-muted/50 text-muted-foreground hover:text-foreground',
+                    )}
+                  >
                     {option.label}
-                  </span>
-                  {isSelected && (
-                    <div className="w-4 h-4 rounded-full bg-primary flex items-center justify-center">
-                      <div className="w-1.5 h-1.5 rounded-full bg-primary-foreground" />
-                    </div>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          {selectedPlatforms.length > 0 && (
-            <div className="space-y-3 pt-6 relative mt-2">
-              <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-border/40 to-transparent" />
-              <p className="text-[11px] font-bold text-muted-foreground/60 uppercase tracking-widest pl-1">
-                Primary Platform Focus
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {value.map((platform) => {
-                  const option = PLATFORM_OPTIONS.find((o) => o.value === platform.name);
-                  if (!option) return null;
-                  const isPrimary = platform.isPrimary;
-
-                  return (
-                    <button
-                      key={platform.name}
-                      onClick={() => handlePrimaryChange(platform.name)}
-                      className={cn(
-                        "px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all duration-300 border flex items-center gap-2",
-                        isPrimary
-                          ? "bg-primary text-primary-foreground border-primary shadow-md shadow-primary/20"
-                          : "bg-muted/50 text-muted-foreground border-transparent hover:border-border/60"
-                      )}
-                    >
-                      {option.label}
-                      {isPrimary && <div className="w-1 h-1 rounded-full bg-primary-foreground animate-pulse" />}
-                    </button>
-                  );
-                })}
-              </div>
+                    {platform.isPrimary && <Check className="size-3.5" strokeWidth={3} />}
+                  </button>
+                );
+              })}
             </div>
-          )}
-
-          {/* Footer Actions */}
-          <div className="flex items-center justify-end gap-4 pt-6 mt-2 relative">
-            <div className="absolute top-0 left-0 right-0 h-12 -mt-12 bg-gradient-to-t from-background/50 to-transparent pointer-events-none" />
-            <button
-              onClick={onBack}
-              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Back
-            </button>
-            <Button
-              onClick={onNext}
-              disabled={selectedPlatforms.length === 0}
-              className="bg-primary/20 text-primary hover:bg-primary hover:text-primary-foreground gap-2 font-medium px-6 tracking-wide h-10 rounded-2xl shadow-sm transition-all"
-            >
-              Continue
-            </Button>
           </div>
-        </div>
-      </div>
-      {error && (
-        <p className="text-red-400 text-xs mt-4 text-center">{error}</p>
-      )}
+        )}
+
+        <OnboardingStepFooter onBack={onBack} onNext={onNext} nextDisabled={value.length === 0} />
+      </OnboardingStepCard>
+      {error && <p role="alert" className="mt-4 text-center text-sm text-destructive">{error}</p>}
     </motion.div>
   );
 }

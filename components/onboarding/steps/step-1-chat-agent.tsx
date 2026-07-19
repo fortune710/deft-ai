@@ -40,6 +40,8 @@ import {
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { logger } from '@/lib/logger';
+import { useAuth } from '@/hooks/use-clerk-auth';
+import { reducedStepTransition, reducedStepVariants, stepTransition, stepVariants } from '@/components/onboarding/motion';
 
 const log = logger.child({ module: 'components/onboarding/steps/step-1-chat-agent' });
 
@@ -47,9 +49,12 @@ interface Step1ChatAgentProps {
     value: DetailedNiche | null;
     onChange: (value: DetailedNiche) => void;
     error?: string;
+    direction: number;
+    shouldReduceMotion: boolean;
 }
 
-export function Step1ChatAgent({ value, onChange, error }: Step1ChatAgentProps) {
+export function Step1ChatAgent({ value, onChange, error, direction, shouldReduceMotion }: Step1ChatAgentProps) {
+    const { userId } = useAuth();
     const isMobile = useIsMobile();
     const [inputValue, setInputValue] = useState(value?.niche || '');
     const [threadId, setThreadId] = useState<string | null>(null);
@@ -67,7 +72,7 @@ export function Step1ChatAgent({ value, onChange, error }: Step1ChatAgentProps) 
 
     const handleStream = async (body: any) => {
         log.debug('Starting onboarding agent stream', {
-            userId: 'resolved_by_clerk',
+            userId: userId || 'signed_out',
             action: 'stream_niche_agent',
             agentAction: body.action,
         });
@@ -116,7 +121,7 @@ export function Step1ChatAgent({ value, onChange, error }: Step1ChatAgentProps) 
                             currentType = null; // Reset for next event
                         } catch (e) {
                             log.error('Failed to parse niche agent event', {
-                                userId: 'resolved_by_clerk',
+                                userId: userId || 'signed_out',
                                 action: 'parse_niche_agent_event',
                                 error: e,
                                 eventLine: trimmedLine,
@@ -127,7 +132,7 @@ export function Step1ChatAgent({ value, onChange, error }: Step1ChatAgentProps) 
             }
         } catch (err) {
             log.error('Niche agent stream failed', {
-                userId: 'resolved_by_clerk',
+                userId: userId || 'signed_out',
                 action: 'stream_niche_agent',
                 error: err,
                 message: err instanceof Error ? err.message : String(err),
@@ -159,7 +164,7 @@ export function Step1ChatAgent({ value, onChange, error }: Step1ChatAgentProps) 
                 break;
             case 'error':
                 log.error('Niche agent returned an error event', {
-                    userId: 'resolved_by_clerk',
+                    userId: userId || 'signed_out',
                     action: 'handle_niche_agent_error',
                     message: data.message,
                 });
@@ -253,15 +258,23 @@ export function Step1ChatAgent({ value, onChange, error }: Step1ChatAgentProps) 
     };
 
     return (
-        <div className="flex flex-col h-full w-full max-w-4xl mx-auto relative px-4 pb-12">
+        <motion.div
+            custom={direction}
+            variants={shouldReduceMotion ? reducedStepVariants : stepVariants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={shouldReduceMotion ? reducedStepTransition : stepTransition}
+            className="relative mx-auto flex h-full w-full max-w-4xl flex-col px-4 pb-12"
+        >
             <div className="flex-1 flex flex-col items-center justify-center min-h-[500px]">
                 <AnimatePresence mode="wait">
                     {flowState === 'initial' && (
                         <motion.div
                             key="initial"
-                            initial={{ opacity: 0, y: 20 }}
+                            initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 20 }}
                             animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -20, transition: { duration: 0.2 } }}
+                            exit={{ opacity: 0, y: shouldReduceMotion ? 0 : -20, transition: { duration: 0.2 } }}
                             className="w-full max-w-2xl mx-auto flex flex-col space-y-4"
                         >
                             <div className="flex items-center gap-3 mb-2">
@@ -269,7 +282,7 @@ export function Step1ChatAgent({ value, onChange, error }: Step1ChatAgentProps) 
                                     <Sparkles className="w-5 h-5" />
                                 </div>
                                 <h2 className="text-xl md:text-2xl font-bold tracking-tight text-foreground font-lexend-deca">
-                                    Let's define your niche
+                                    Let&apos;s define your niche
                                 </h2>
                             </div>
                             <div className="space-y-4">
@@ -289,9 +302,9 @@ export function Step1ChatAgent({ value, onChange, error }: Step1ChatAgentProps) 
                     {(flowState === 'reasoning' || flowState === 'done') && (
                         <motion.div
                             key="reasoning"
-                            initial={{ opacity: 0, y: 20 }}
+                            initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 20 }}
                             animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -20, transition: { duration: 0.3 } }}
+                            exit={{ opacity: 0, y: shouldReduceMotion ? 0 : -20, transition: { duration: 0.2 } }}
                             className="w-full max-w-xl mx-auto space-y-10"
                         >
                             <div className="space-y-3 px-2">
@@ -301,7 +314,7 @@ export function Step1ChatAgent({ value, onChange, error }: Step1ChatAgentProps) 
                                 </div>
                                 <div className="p-4 rounded-2xl bg-primary/5 border border-primary/10 shadow-sm">
                                     <p className="text-base text-foreground font-medium italic opacity-90 leading-relaxed whitespace-pre-wrap break-words font-alan-sans">
-                                        "{inputValue}"
+                                        &ldquo;{inputValue}&rdquo;
                                     </p>
                                 </div>
                             </div>
@@ -326,7 +339,7 @@ export function Step1ChatAgent({ value, onChange, error }: Step1ChatAgentProps) 
                                         return (
                                             <motion.div
                                                 key={step.id}
-                                                initial={{ opacity: 0, x: -10 }}
+                                                initial={{ opacity: 0, x: shouldReduceMotion ? 0 : -10 }}
                                                 animate={{ opacity: 1, x: 0 }}
                                                 className="flex items-start gap-5 relative group"
                                             >
@@ -357,9 +370,9 @@ export function Step1ChatAgent({ value, onChange, error }: Step1ChatAgentProps) 
                                         );
                                     })}
                                     {isStreaming && (
-                                        <div className="flex items-center gap-4 animate-pulse">
+                                        <div className="flex items-center gap-4" role="status" aria-live="polite">
                                             <div className="w-8 h-8 rounded-full bg-muted border-2 border-primary/20 flex items-center justify-center font-bold">
-                                                <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                                                <Loader2 className="w-4 h-4 animate-spin text-primary motion-reduce:animate-none" />
                                             </div>
                                             <div className="h-4 w-48 bg-muted rounded-full font-alan-sans" />
                                         </div>
@@ -368,7 +381,7 @@ export function Step1ChatAgent({ value, onChange, error }: Step1ChatAgentProps) 
 
                                 {isComplete && !isStreaming && (
                                     <motion.div
-                                        initial={{ opacity: 0, y: 10 }}
+                                        initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 10 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         className="pt-10 flex justify-center"
                                     >
@@ -389,7 +402,7 @@ export function Step1ChatAgent({ value, onChange, error }: Step1ChatAgentProps) 
                     {flowState === 'questions' && currentQuestion && (
                         <motion.div
                             key="question"
-                            initial={{ opacity: 0, y: 30 }}
+                            initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 24 }}
                             animate={{ opacity: 1, y: 0 }}
                             className="w-full max-w-xl mx-auto mt-4"
                         >
@@ -415,12 +428,14 @@ export function Step1ChatAgent({ value, onChange, error }: Step1ChatAgentProps) 
                                             return (
                                                 <button
                                                     key={option.value}
+                                                    type="button"
+                                                    aria-pressed={isSelected}
                                                     onClick={() => {
                                                         handleAnswerSelect(currentQuestion.id, option.value);
                                                         setIndividualAnswer(''); // Clear custom if picking preset
                                                     }}
                                                     className={cn(
-                                                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-all",
+                                                        "w-full min-h-11 flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left outline-none transition-[background-color,border-color,box-shadow,transform] duration-200 [transition-timing-function:cubic-bezier(0.23,1,0.32,1)] active:scale-[0.98] motion-reduce:transform-none focus-visible:ring-3 focus-visible:ring-ring/40",
                                                         isSelected ? "bg-primary/5 border-primary shadow-sm" : "bg-transparent border-transparent hover:bg-muted/30"
                                                     )}
                                                 >
@@ -438,14 +453,11 @@ export function Step1ChatAgent({ value, onChange, error }: Step1ChatAgentProps) 
                                         })}
 
                                         {currentQuestion.allowCustom && (
-                                            <div
-                                                className={cn(
-                                                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all mt-1",
+                                                <div
+                                                    className={cn(
+                                                    "w-full min-h-11 flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-[background-color,border-color,box-shadow] duration-200 mt-1 focus-within:ring-3 focus-within:ring-ring/40",
                                                     (answers[currentQuestion.id] === 'custom' || individualAnswer) ? "bg-primary/5 border-primary shadow-sm" : "bg-transparent border-transparent hover:bg-muted/30"
                                                 )}
-                                                onClick={() => {
-                                                    handleAnswerSelect(currentQuestion.id, 'custom');
-                                                }}
                                             >
                                                 <div className={cn(
                                                     "w-5 h-5 shrink-0 flex items-center justify-center rounded text-[10px] font-bold",
@@ -460,6 +472,7 @@ export function Step1ChatAgent({ value, onChange, error }: Step1ChatAgentProps) 
                                                             setIndividualAnswer(e.target.value);
                                                             handleAnswerSelect(currentQuestion.id, 'custom');
                                                         }}
+                                                        onFocus={() => handleAnswerSelect(currentQuestion.id, 'custom')}
                                                         placeholder="Specify your own answer..."
                                                         className="resize-none h-auto min-h-5 text-[13px] leading-5 bg-transparent !border-0 p-0 outline-none !ring-0 ring-offset-0 focus:border-0 focus:outline-none focus:!ring-0 focus:ring-offset-0 focus-visible:border-0 focus-visible:outline-none focus-visible:!ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground/50 !shadow-none overflow-hidden"
                                                         rows={1}
@@ -533,6 +546,6 @@ export function Step1ChatAgent({ value, onChange, error }: Step1ChatAgentProps) 
                 </Dialog>
             )}
 
-        </div>
+        </motion.div>
     );
 }
