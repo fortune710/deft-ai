@@ -1,31 +1,36 @@
-import { createServerSupabaseClient } from '@/lib/supabase/server';
+import 'server-only';
+
+import { api } from '@/convex/_generated/api';
+import { ConvexServerAuthError, getAuthenticatedConvexClient } from '@/lib/convex/server';
+import { logger } from '@/lib/logger.server';
+
+const log = logger.child({ module: 'lib/auth/check-onboarding' });
 
 export async function checkOnboardingStatus(): Promise<{
   isCompleted: boolean;
   isAuthenticated: boolean;
 }> {
+  let userId = 'unknown';
   try {
-    const supabase = await createServerSupabaseClient();
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return { isCompleted: false, isAuthenticated: false };
-    }
-
-    const { data: profile } = await supabase
-      .from('user_content_profile')
-      .select('completed_at')
-      .eq('user_id', user.id)
-      .maybeSingle();
-
-    const isCompleted = !!(profile && profile.completed_at !== null);
-
+    const authenticated = await getAuthenticatedConvexClient('check_onboarding_status');
+    userId = authenticated.userId;
+    const profile = await authenticated.convex.query(api.userContentProfiles.getCurrent, {});
+    const isCompleted = Boolean(profile?.completed_at);
+    log.debug('Checked onboarding status in Convex', {
+      userId,
+      action: 'check_onboarding_status',
+      statusCode: 200,
+      isCompleted,
+    });
     return { isCompleted, isAuthenticated: true };
   } catch (error) {
-    console.error('Error checking onboarding status:', error);
-    return { isCompleted: false, isAuthenticated: false };
+    const isUnauthenticated = error instanceof ConvexServerAuthError && error.statusCode === 401;
+    log.error('Failed to check onboarding status in Convex', {
+      userId: isUnauthenticated ? 'signed_out' : userId,
+      action: 'check_onboarding_status',
+      statusCode: error instanceof ConvexServerAuthError ? error.statusCode : 500,
+      error,
+    });
+    return { isCompleted: false, isAuthenticated: !isUnauthenticated };
   }
 }

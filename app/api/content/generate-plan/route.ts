@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { generateContentPlanTask } from '@/trigger/generate-content-plan';
-import { TABLES } from '@/lib/supabase/constants';
-import { logger } from '@/lib/logger';
+import { logger } from '@/lib/logger.server';
+import { auth } from '@clerk/nextjs/server';
+import { ConvexHttpClient } from 'convex/browser';
+import { api } from '@/convex/_generated/api';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -13,23 +14,18 @@ export async function POST(request: NextRequest) {
   let userId: string | undefined;
 
   try {
-    const supabase = await createServerSupabaseClient();
-
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
+    const { userId: clerkUserId } = await auth();
+    if (!clerkUserId) {
       log.error(`Unauthorized for user ${userId}`, {
-        userId,
-        statusCode: authError?.status || 401,
-        error: authError?.message || 'Unauthorized',
+        userId: 'signed_out',
+        action: 'generate_content_plan',
+        statusCode: 401,
+        error: 'Unauthorized',
       });
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    userId = user.id;
+    userId = clerkUserId;
 
     const body = await request.json();
     const platforms: string[] | undefined = body.platforms;
@@ -45,24 +41,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: profile, error: profileError } = await supabase
-      .from(TABLES.USER_CONTENT_PROFILE)
-      .select('*')
-      .eq('user_id', user.id)
-      .single();
-
-    if (profileError) {
-      log.error(`Failed to fetch user profile for user ${userId}`, {
-        userId,
-        errorCode: profileError.code,
-        error: profileError.message,
-      });
-
-      return NextResponse.json(
-        { error: `Failed to fetch user profile for user ${userId}`, data: null, success: false },
-        { status: 500 }
-      );
-    }
+    const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
+    if (!convexUrl) throw new Error('NEXT_PUBLIC_CONVEX_URL is not configured');
+    const convex = new ConvexHttpClient(convexUrl);
+    const workerSecret = process.env.TRIGGER_CONVEX_SECRET;
+    if (!workerSecret) throw new Error('TRIGGER_CONVEX_SECRET is not configured');
+    const profile = await convex.query(api.triggerWorkers.getProfile, { workerSecret, userId });
 
     if (!profile) {
       const errorMessage = 'User profile not found. Please complete onboarding.';
@@ -77,13 +61,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    await convex.mutation(api.triggerWorkers.upsertContentEngineProgress, {
+      workerSecret,
+      userId,
+      progress: 0,
+      stage: 'queued',
+      message: 'Queued for content generation',
+    });
+
     // Track generation start
     log.info(`Starting content generation for user ${userId}`, {
       userId,
       platforms,
     });
 
-    generateContentPlanTask.trigger({
+    await generateContentPlanTask.trigger({
       userId,
       platforms,
     });

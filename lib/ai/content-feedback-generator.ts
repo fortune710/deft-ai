@@ -1,4 +1,6 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { ConvexHttpClient } from 'convex/browser';
+import type { Id } from '@/convex/_generated/dataModel';
+import { api } from '@/convex/_generated/api';
 import type { AIFeedback, ContentAnalytics, FeedbackGenerationResult, VideoMetrics, ContentType } from '@/types/content-analytics';
 import { generateWithModel } from './models';
 import { AI_MODELS } from '@/types/ai-models';
@@ -14,25 +16,25 @@ interface HistoricalContent {
   analysis_results: AIFeedback | null;
 }
 
-export async function fetchUserContentHistory(supabase: SupabaseClient, userId: string, limit: number = 5): Promise<HistoricalContent[]> {
+export async function fetchUserContentHistory(
+  convex: ConvexHttpClient,
+  workerSecret: string,
+  userId: string,
+  limit: number = 5,
+): Promise<HistoricalContent[]> {
   try {
-    const { data, error } = await supabase
-      .from('content_analytics')
-      .select('id, title, platform, content_type, metrics, analysis_results')
-      .eq('user_id', userId)
-      .eq('processing_status', 'completed')
-      .not('analysis_results', 'is', null)
-      .order('created_at', { ascending: false })
-      .limit(limit);
-
-    if (error) {
-      console.error('Error fetching content history:', error);
-      return [];
-    }
-
-    return data || [];
-  } catch (err) {
-    console.error('Error in fetchUserContentHistory:', err);
+    const records = await convex.query(api.triggerWorkers.listContentHistory, {
+      workerSecret, userId, limit,
+    });
+    return records.map((record) => ({
+      id: record._id,
+      title: record.title,
+      platform: record.platform,
+      content_type: record.content_type,
+      metrics: record.metrics as VideoMetrics | null,
+      analysis_results: record.analysis_results as AIFeedback | null,
+    }));
+  } catch {
     return [];
   }
 }
@@ -182,23 +184,23 @@ export async function analyzeTextContent(contentText: string, platform: string):
 }
 
 export async function generateContentFeedback(
-  supabase: SupabaseClient,
-  analyticsId: string,
+  convex: ConvexHttpClient,
+  analyticsId: Id<'content_analytics'>,
   userId: string,
+  workerSecret: string,
   options: { persist?: boolean } = {}
 ): Promise<FeedbackGenerationResult> {
   try {
-    const { data: content, error: contentError } = await supabase
-      .from('content_analytics')
-      .select('*')
-      .eq('id', analyticsId)
-      .maybeSingle();
+    const record = await convex.query(api.triggerWorkers.getContentAnalytics, {
+      workerSecret, userId, analyticsId,
+    });
+    const content = record ? { ...record, id: record._id } as unknown as ContentAnalytics : null;
 
-    if (contentError || !content) {
+    if (!content) {
       return { success: false, error: 'Content not found' };
     }
 
-    const historicalContent = await fetchUserContentHistory(supabase, userId);
+    const historicalContent = await fetchUserContentHistory(convex, workerSecret, userId);
 
     let prompt: string;
     if (content.content_type === 'text') {
@@ -207,8 +209,13 @@ export async function generateContentFeedback(
       }
       prompt = buildTextFeedbackPrompt(content, historicalContent);
     } else {
+      const videoUrl = await convex.query(api.triggerWorkers.getFileUrl, {
+        workerSecret,
+        storageId: content.video_file_path as Id<'_storage'>,
+      });
+      if (!videoUrl) return { success: false, error: 'Video file URL could not be resolved' };
       const videoResult = await generateVideoFeedback(
-        supabase,
+        videoUrl,
         content,
         historicalContent,
         AI_MODELS.GOOGLE_FLASH
@@ -216,17 +223,6 @@ export async function generateContentFeedback(
 
       if (!videoResult.success || !videoResult.feedback) {
         return { success: false, error: videoResult.error || 'Video analysis failed' };
-      }
-
-      const { error: updateError } = await supabase
-        .from('content_analytics')
-        .update({
-          analysis_results: videoResult.feedback,
-        })
-        .eq('id', analyticsId);
-
-      if (updateError) {
-        return { success: false, error: `Failed to save feedback: ${updateError.message}` };
       }
 
       return { success: true, feedback: videoResult.feedback };
@@ -243,14 +239,9 @@ export async function generateContentFeedback(
 
     const { persist = true } = options;
     if (persist) {
-      const { error: updateError } = await supabase
-        .from('content_analytics')
-        .update({ analysis_results: feedback })
-        .eq('id', analyticsId);
-
-      if (updateError) {
-        return { success: false, error: `Failed to save feedback: ${updateError.message}` };
-      }
+      await convex.mutation(api.triggerWorkers.updateContentAnalytics, {
+        workerSecret, userId, analyticsId, updates: { analysis_results: feedback },
+      });
     }
 
     return { success: true, feedback };

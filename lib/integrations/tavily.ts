@@ -1,5 +1,5 @@
 import { tavily } from "@tavily/core";
-import { logger } from "@/lib/logger";
+import { logger } from "@/lib/logger.server";
 
 const TAVILY_BASE_URL = "https://api.tavily.com";
 const log = logger.child({ module: 'Tavily' });

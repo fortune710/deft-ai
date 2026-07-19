@@ -1,9 +1,10 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { TABLES } from '@/lib/supabase/constants';
-import { logger } from '@/lib/logger';
+import type { Id } from '@/convex/_generated/dataModel';
+import { api } from '@/convex/_generated/api';
+import { ConvexServerAuthError, getAuthenticatedConvexClient } from '@/lib/convex/server';
+import { logger } from '@/lib/logger.server';
 import { PDFParse } from 'pdf-parse';
 import mammoth from 'mammoth';
 
@@ -24,36 +25,35 @@ export interface CustomObject {
  * Fetch all custom objects for the current authenticated user.
  */
 export async function getCustomObjects() {
-  const supabase = await createServerSupabaseClient();
-  
+  let userId = 'unknown';
   try {
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    
-    if (userError || !user) {
-      log.error('Error getting user for getCustomObjects', { error: userError?.message });
-      return { success: false, error: 'Unauthorized', data: [] };
-    }
-
-    log.info('Fetching custom objects', { userId: user.id, action: 'get_custom_objects' });
-    
-    const { data, error } = await supabase
-      .from(TABLES.CUSTOM_OBJECTS)
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      log.error('Error fetching custom objects', { 
-        userId: user.id, 
-        error: error.message,
-        action: 'get_custom_objects_error'
-      });
-      return { success: false, error: error.message, data: [] };
-    }
-
-    return { success: true, data: data as CustomObject[] };
-  } catch (error: any) {
-    log.error('Unexpected error in getCustomObjects', { error: error.message });
-    return { success: false, error: 'Internal server error', data: [] };
+    const authenticated = await getAuthenticatedConvexClient('get_custom_objects');
+    userId = authenticated.userId;
+    const documents = await authenticated.convex.query(api.customObjects.listCurrent, {});
+    const data = documents.map((document) => ({
+      id: document._id,
+      user_id: document.user_id,
+      name: document.name,
+      type: document.type,
+      content: document.content ?? null,
+      created_at: document.created_at ?? new Date(document._creationTime).toISOString(),
+    }));
+    log.info('Fetched custom objects from Convex', {
+      userId,
+      action: 'get_custom_objects',
+      statusCode: 200,
+      objectCount: data.length,
+    });
+    return { success: true, data };
+  } catch (error) {
+    const statusCode = error instanceof ConvexServerAuthError ? error.statusCode : 500;
+    log.error('Failed to fetch custom objects from Convex', {
+      userId,
+      action: 'get_custom_objects',
+      statusCode,
+      error,
+    });
+    return { success: false, error: error instanceof Error ? error.message : 'Internal server error', data: [] };
   }
 }
 
@@ -61,15 +61,10 @@ export async function getCustomObjects() {
  * Handle creation of a custom object via FormData, including server-side file extraction.
  */
 export async function handleCreateCustomObject(formData: FormData) {
-  const supabase = await createServerSupabaseClient();
-  
+  let userId = 'unknown';
   try {
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    
-    if (userError || !user) {
-      log.error('Error getting user for handleCreateCustomObject', { error: userError?.message });
-      return { success: false, error: 'Unauthorized' };
-    }
+    const authenticated = await getAuthenticatedConvexClient('create_custom_object');
+    userId = authenticated.userId;
 
     const name = formData.get('name') as string;
     const type = formData.get('type') as CustomObjectType;
@@ -77,6 +72,11 @@ export async function handleCreateCustomObject(formData: FormData) {
     const file = formData.get('file') as File | null;
 
     if (!name || !type) {
+      log.warn('Custom object name or type is missing', {
+        userId,
+        action: 'create_custom_object',
+        statusCode: 400,
+      });
       return { success: false, error: 'Name and type are required' };
     }
 
@@ -84,7 +84,7 @@ export async function handleCreateCustomObject(formData: FormData) {
 
     if (file && file.size > 0) {
       log.info('Processing file upload for custom object', { 
-        userId: user.id, 
+        userId,
         fileName: file.name, 
         fileType: file.type,
         action: 'file_extraction_start'
@@ -106,7 +106,7 @@ export async function handleCreateCustomObject(formData: FormData) {
         extractedContent = buffer.toString('utf-8');
       } else {
         log.warn('Unsupported file type for extraction', { 
-          userId: user.id, 
+          userId,
           fileType: file.type,
           fileName: file.name
         });
@@ -114,41 +114,44 @@ export async function handleCreateCustomObject(formData: FormData) {
     }
 
     log.info('Creating custom object', { 
-      userId: user.id, 
+      userId,
       name, 
       type, 
       hasContent: !!extractedContent,
       action: 'create_custom_object' 
     });
 
-    const { data: newObject, error } = await supabase
-      .from(TABLES.CUSTOM_OBJECTS)
-      .insert({
-        user_id: user.id,
-        name,
-        type,
-        content: extractedContent,
-      })
-      .select()
-      .single();
-
-    if (error) {
-      log.error('Error creating custom object', { 
-        userId: user.id, 
-        error: error.message,
-        action: 'create_custom_object_error'
-      });
-      return { success: false, error: error.message };
-    }
+    const document = await authenticated.convex.mutation(api.customObjects.createCurrent, {
+      name,
+      type,
+      content: extractedContent,
+    });
+    const newObject = document ? {
+      id: document._id,
+      user_id: document.user_id,
+      name: document.name,
+      type: document.type,
+      content: document.content ?? null,
+      created_at: document.created_at ?? new Date(document._creationTime).toISOString(),
+    } : null;
 
     revalidatePath('/customize');
-    return { success: true, data: newObject };
-  } catch (error: any) {
-    log.error('Unexpected error in handleCreateCustomObject', { 
-        error: error.message,
-        stack: error.stack
+    log.info('Created custom object in Convex', {
+      userId,
+      action: 'create_custom_object',
+      statusCode: 200,
+      objectId: document?._id,
     });
-    return { success: false, error: 'Failed to process and create object' };
+    return { success: true, data: newObject };
+  } catch (error) {
+    const statusCode = error instanceof ConvexServerAuthError ? error.statusCode : 500;
+    log.error('Unexpected error in handleCreateCustomObject', { 
+      userId,
+      action: 'create_custom_object',
+      statusCode,
+      error,
+    });
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to process and create object' };
   }
 }
 
@@ -156,37 +159,36 @@ export async function handleCreateCustomObject(formData: FormData) {
  * Delete a custom object by ID.
  */
 export async function deleteCustomObject(id: string) {
-  const supabase = await createServerSupabaseClient();
-  
+  let userId = 'unknown';
   try {
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    
-    if (userError || !user) {
-      return { success: false, error: 'Unauthorized' };
-    }
-
-    log.info('Deleting custom object', { userId: user.id, objectId: id, action: 'delete_custom_object' });
-
-    const { error } = await supabase
-      .from(TABLES.CUSTOM_OBJECTS)
-      .delete()
-      .eq('id', id)
-      .eq('user_id', user.id);
-
-    if (error) {
-      log.error('Error deleting custom object', { 
-        userId: user.id, 
-        objectId: id, 
-        error: error.message,
-        action: 'delete_custom_object_error'
-      });
-      return { success: false, error: error.message };
-    }
+    const authenticated = await getAuthenticatedConvexClient('delete_custom_object');
+    userId = authenticated.userId;
+    log.info('Deleting custom object from Convex', {
+      userId,
+      objectId: id,
+      action: 'delete_custom_object',
+    });
+    await authenticated.convex.mutation(api.customObjects.removeCurrent, {
+      objectId: id as Id<'custom_objects'>,
+    });
 
     revalidatePath('/customize');
+    log.info('Deleted custom object from Convex', {
+      userId,
+      objectId: id,
+      action: 'delete_custom_object',
+      statusCode: 200,
+    });
     return { success: true };
-  } catch (error: any) {
-    log.error('Unexpected error in deleteCustomObject', { error: error.message });
-    return { success: false, error: 'Internal server error' };
+  } catch (error) {
+    const statusCode = error instanceof ConvexServerAuthError ? error.statusCode : 500;
+    log.error('Failed to delete custom object from Convex', {
+      userId,
+      objectId: id,
+      action: 'delete_custom_object',
+      statusCode,
+      error,
+    });
+    return { success: false, error: error instanceof Error ? error.message : 'Internal server error' };
   }
 }

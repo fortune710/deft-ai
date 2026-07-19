@@ -12,7 +12,7 @@ import { addDays, startOfDay } from 'date-fns';
 import { buildCurrentAffairsClassifierPrompt } from '../prompts/current-affairs-classifier';
 import { tavilyResearch } from '@/lib/integrations/tavily';
 import { z } from "zod";
-import { logger } from '@/lib/logger';
+import { logger } from '@/lib/logger.server';
 import { BaseMessageLike } from '@langchain/core/messages';
 
 const CurrentAffairsClassificationSchema = z.object({

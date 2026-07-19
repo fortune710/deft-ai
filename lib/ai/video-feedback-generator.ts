@@ -1,8 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AIFeedback, ContentAnalytics } from '@/types/content-analytics';
 import type { AIModelConfig } from '@/types/ai-models';
-import { SUPABASE_STORAGE_BUCKETS } from '@/lib/utils';
 import { parseAIResponse } from './feedback-response-parser';
 
 interface HistoricalContentSummary {
@@ -133,23 +131,8 @@ Respond ONLY with the JSON object, no additional text.`;
   return prompt;
 }
 
-async function getVideoPublicUrl(
-  supabase: SupabaseClient,
-  videoFilePath: string
-): Promise<string> {
-  const { data } = supabase.storage
-    .from(SUPABASE_STORAGE_BUCKETS.VIDEOS)
-    .getPublicUrl(videoFilePath);
-
-  if (!data?.publicUrl) {
-    throw new Error('Failed to generate a public URL for the video asset');
-  }
-
-  return data.publicUrl;
-}
-
 export async function generateVideoFeedback(
-  supabase: SupabaseClient,
+  videoUrl: string,
   content: ContentAnalytics,
   historicalContent: HistoricalContentSummary[],
   modelConfig: AIModelConfig
@@ -166,7 +149,6 @@ export async function generateVideoFeedback(
       return { success: false, error: 'Video file path is required for video feedback generation' };
     }
 
-    const videoUrl = await getVideoPublicUrl(supabase, content.video_file_path);
     const prompt = buildVideoFeedbackPrompt(content, historicalContent);
 
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');

@@ -52,6 +52,16 @@ export interface ContentItemFormData {
   content: ItemContent;
 }
 
+export interface ContentEngineProgress {
+  id: string;
+  user_id: string;
+  progress: number;
+  stage: string;
+  message: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 type TContentItem = Omit<ContentItem, 'id' | 'created_at' | 'updated_at'>;
 
 export interface PublishPlanPayload {

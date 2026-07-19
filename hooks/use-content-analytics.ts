@@ -1,27 +1,24 @@
-import { useQuery } from '@tanstack/react-query';
-import type { ContentAnalytics, Platform, ProcessingStatus } from '@/types/content-analytics';
+'use client';
 
-interface UseContentAnalyticsOptions {
-  platform?: Platform;
-  status?: ProcessingStatus;
-}
+import { useQuery } from 'convex/react';
+import { api } from '@/convex/_generated/api';
+import type { ContentAnalytics, Platform, ProcessingStatus } from '@/types/content-analytics';
+import { useAuth } from '@/hooks/use-clerk-auth';
+import { logger } from '@/lib/logger';
+
+const log = logger.child({ module: 'hooks/use-content-analytics' });
+
+interface UseContentAnalyticsOptions { platform?: Platform; status?: ProcessingStatus }
 
 export function useContentAnalytics(options: UseContentAnalyticsOptions = {}) {
-  const { platform, status } = options;
-
-  const queryParams = new URLSearchParams();
-  if (platform) queryParams.append('platform', platform);
-  if (status) queryParams.append('status', status);
-
-  return useQuery({
-    queryKey: ['content-analytics', platform, status],
-    queryFn: async (): Promise<ContentAnalytics[]> => {
-      const response = await fetch(`/api/content/list?${queryParams.toString()}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch content analytics');
-      }
-      const data = await response.json();
-      return data.content || [];
-    },
+  const { userId } = useAuth();
+  const records = useQuery(api.contentAnalytics.list, userId ? options : 'skip');
+  log.debug('Resolved Convex content analytics list', {
+    userId: userId || 'signed_out', action: 'fetch_content_analytics', ...options,
   });
+  return {
+    data: records?.map(({ _id, _creationTime, ...record }) => ({ ...record, id: _id }) as unknown as ContentAnalytics) ?? [],
+    isLoading: Boolean(userId) && records === undefined,
+    error: null as Error | null,
+  };
 }

@@ -3,6 +3,9 @@ import { getModel } from "../models/get-model";
 import { AI_MODELS } from "@/types/ai-models";
 import { DetailedNiche, NicheAgentQuestion } from "@/types/niche-agent";
 import { analysisSchema } from "@/lib/validations/onboarding/agent";
+import { logger } from '@/lib/logger.server';
+
+const log = logger.child({ module: 'lib/ai/agents/niche-discovery-agent' });
 
 
 
@@ -72,6 +75,32 @@ async function analyzeNiche(state: typeof NicheAgentState.State) {
     };
 }
 
+export async function analyzeNicheTurn(input: {
+    userId: string;
+    initialNiche: string;
+    userAnswers: Record<string, string>;
+    iterationCount: number;
+}) {
+    log.info('Analyzing onboarding niche turn', {
+        userId: input.userId,
+        action: 'analyze_niche_turn',
+        iterationCount: input.iterationCount,
+        answerCount: Object.keys(input.userAnswers).length,
+    });
+
+    const result = await analyzeNiche({
+        initialNiche: input.initialNiche,
+        userAnswers: input.userAnswers,
+        iterationCount: input.iterationCount,
+        reasoningSteps: [],
+        questions: [],
+        finalNicheDescription: null,
+        isComplete: false,
+    });
+
+    return result;
+}
+
 // Node: Wait for user input (HITL)
 async function awaitUser(state: typeof NicheAgentState.State) {
     // LangGraph interrupt pauses execution and saves state.
@@ -103,4 +132,3 @@ export const nicheDiscoveryWorkflow = new StateGraph(NicheAgentState)
     .addEdge("awaitUser", "analyze");
 
 export const graph = nicheDiscoveryWorkflow.compile();
-

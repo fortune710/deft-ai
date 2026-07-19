@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabaseClient, supabaseAdmin } from '@/lib/supabase/server';
-import { logger } from '@/lib/logger';
+import { logger } from '@/lib/logger.server';
 import { processContentAnalyticsTask } from '@/trigger/process-content-analytics';
 import type { Platform, ContentType } from '@/types/content-analytics';
 import { format } from 'date-fns';
-import { SUPABASE_STORAGE_BUCKETS } from '@/lib/utils';
 import { trackServerError } from '@/lib/posthog/server';
+import { api } from '@/convex/_generated/api';
+import type { Id } from '@/convex/_generated/dataModel';
+import { ConvexServerAuthError, getAuthenticatedConvexClient } from '@/lib/convex/server';
 
 
 
@@ -17,10 +18,10 @@ export async function POST(request: NextRequest) {
   const platform: Platform | undefined = body.platform;
   const contentTypeParam: ContentType | undefined = body.content_type;
   const userId: string | undefined = body.user_id;
-  const analyticsId: string | undefined = body.analytics_id;
+  const videoUrlInput: string | null = body.video_url || null;
+  const videoStorageId: Id<'_storage'> | null = body.video_storage_id || null;
 
   const missingFields: Record<string, any> = {};
-  if (!analyticsId) missingFields.analytics_id = analyticsId;
   if (!userId) missingFields.user_id = userId;
   if (!platform) missingFields.platform = platform;
   if (!contentTypeParam) missingFields.content_type = contentTypeParam;
@@ -39,7 +40,6 @@ export async function POST(request: NextRequest) {
     // Step 1: Parse request (multipart/form-data or JSON)
     requestLogger.debug('Parsing request');
     requestLogger.info('Request parsed', { 
-      analyticsId,
       userId,
       platform,
       contentTypeParam,
@@ -47,22 +47,11 @@ export async function POST(request: NextRequest) {
       file,
     });
 
-    // Step 3: Create supabase client using userId, then read user from it
-    requestLogger.debug('Initializing Supabase client', { userId });
-    const supabase = await createServerSupabaseClient();
+    const authenticated = await getAuthenticatedConvexClient('upload_content');
+    const clerkUserId = authenticated.userId;
 
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError || !user) {
-      requestLogger.error('Failed to get authenticated user', userError, { userError: userError?.message });
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    if (user.id !== userId) {
-      requestLogger.warn('User mismatch for upload request', { userId, authedUserId: user.id });
+    if (clerkUserId !== userId) {
+      requestLogger.warn('User mismatch for upload request', { userId, authedUserId: clerkUserId });
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     
@@ -82,66 +71,42 @@ export async function POST(request: NextRequest) {
       content_type: contentTypeParam 
     });
 
-    let videoPath: string | null = null;
-    let videoUrl: string = '';
-
-    if (contentTypeParam === 'video') {
-      videoPath = `videos/${analyticsId}.mp4`;
-      const { data: videoData } = supabaseAdmin.storage.from(SUPABASE_STORAGE_BUCKETS.VIDEOS).getPublicUrl(videoPath);
-      videoUrl = videoData?.publicUrl || '';
-    }
-
-    const { data: contentRecord, error: insertError } = await supabase
-      .from('content_analytics')
-      .insert({
-        id: analyticsId,
-        user_id: userId,
-        video_url: videoUrl,
-        platform: platform,
-        content_type: contentTypeParam,
-        content_text: contentText || null,
-        video_file_path: videoPath,
-        title: defaultTitle,
-        description: '',
-        processing_status: 'pending',
-      })
-      .select()
-      .single();
-
-
-    if (insertError) {
-      requestLogger.error('Failed to insert content record', insertError, {
-        userId: userId,
-        platform: platform,
-        errorCode: insertError.code,
-        errorMessage: insertError.message,
-        errorDetails: insertError.details,
-      });
-      return NextResponse.json({ error: insertError.message }, { status: 500 });
-    }
+    const contentRecordId = await authenticated.convex.mutation(api.contentAnalytics.create, {
+      video_url: videoUrlInput,
+      platform: platform!,
+      content_type: contentTypeParam!,
+      content_text: contentText || null,
+      video_file_path: videoStorageId,
+      model_file_reference: null,
+      title: defaultTitle,
+      description: '',
+    });
 
     requestLogger.info('Content record created', { 
-      analyticsId: contentRecord.id, 
+      analyticsId: contentRecordId,
       userId: userId,
       platform: platform 
     });
 
     // Step 9: Trigger Trigger.dev task
     requestLogger.debug('Triggering Trigger.dev task', { 
-      analyticsId: contentRecord.id, 
+      analyticsId: contentRecordId,
       userId: userId 
     });
     
     try {
       await processContentAnalyticsTask.trigger({
         userId: userId,
-        analyticsId: contentRecord.id,
+        analyticsId: contentRecordId,
       });
-      requestLogger.info('Trigger.dev task triggered', { analyticsId: contentRecord.id });
+      requestLogger.info('Trigger.dev task triggered', { analyticsId: contentRecordId });
     } catch (triggerError) {
-      requestLogger.error('Failed to trigger task', triggerError, {
-        analyticsId: contentRecord.id,
+      requestLogger.error('Failed to trigger task', {
+        analyticsId: contentRecordId,
         userId: userId,
+        action: 'trigger_content_analytics',
+        error: triggerError,
+        message: triggerError instanceof Error ? triggerError.message : String(triggerError),
       });
       // Continue anyway - task might be triggered later
     }
@@ -170,49 +135,32 @@ export async function POST(request: NextRequest) {
     //     };
     //   }
 
-    //   // Update content record with metrics if available
-    //   if (metricsResult.success && metricsResult.data) {
-    //     requestLogger.debug('Updating content record with scraped metrics', { analyticsId: contentRecord.id });
-        
-    //     const { error: updateError } = await supabase
-    //       .from('content_analytics')
-    //       .update({
-    //         metrics: metricsResult.data,
-    //         metrics_scraped: true,
-    //         title: metricsResult.data.title || contentRecord.title,
-    //         description: metricsResult.data.description || contentRecord.description,
-    //       })
-    //       .eq('id', contentRecord.id);
-
-    //     if (updateError) {
-    //       requestLogger.error('Failed to update content record with metrics', updateError, {
-    //         analyticsId: contentRecord.id,
-    //         errorCode: updateError.code,
-    //         errorMessage: updateError.message,
-    //       });
-    //     } else {
-    //       requestLogger.info('Content record updated with metrics', { analyticsId: contentRecord.id });
-    //     }
-    //   }
     // }
 
     // Step 12: Return success response
     requestLogger.info('Content upload completed successfully', {
-      analyticsId: contentRecord.id,
+      analyticsId: contentRecordId,
       requiresManualMetrics: metricsResult.requires_manual_input,
     });
     return NextResponse.json({
-      analytics_id: contentRecord.id,
+      analytics_id: contentRecordId,
       message: 'Content added to processing queue',
       requires_manual_metrics: metricsResult.requires_manual_input,
     });
 
   } catch (err) {
-    requestLogger.error('Unexpected error in content upload', err);
+    const statusCode = err instanceof ConvexServerAuthError ? err.statusCode : 500;
+    requestLogger.error('Unexpected error in content upload', {
+      userId: userId || 'unknown',
+      action: 'upload_content',
+      statusCode,
+      error: err,
+      message: err instanceof Error ? err.message : String(err),
+    });
     trackServerError(err as Error, { userId: userId ?? "" }, userId ?? "");
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Internal server error' },
-      { status: 500 }
+      { status: statusCode }
     );
   }
 }

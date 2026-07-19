@@ -1,11 +1,13 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { ConvexHttpClient } from 'convex/browser';
+import type { Id } from '@/convex/_generated/dataModel';
 import { AI_MODELS, AIModelConfig } from '@/types/ai-models';
 import type { ContentType, FeedbackGenerationResult } from '@/types/content-analytics';
 import { generateContentFeedback } from '@/lib/ai/content-feedback-generator';
 
 export interface ContentAnalysisContext {
-  supabase: SupabaseClient;
-  analyticsId: string;
+  convex: ConvexHttpClient;
+  workerSecret: string;
+  analyticsId: Id<'content_analytics'>;
   userId: string;
   contentType: ContentType;
 }
@@ -52,6 +54,12 @@ export class ContentAnalysisAgent {
   }
 
   private defaultProvider: ContentAnalysisProvider = async (context) => {
-    return generateContentFeedback(context.supabase, context.analyticsId, context.userId, { persist: false });
+    return generateContentFeedback(
+      context.convex,
+      context.analyticsId,
+      context.userId,
+      context.workerSecret,
+      { persist: false },
+    );
   };
 }
