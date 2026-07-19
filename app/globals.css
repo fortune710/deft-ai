@@ -2,6 +2,21 @@
 @tailwind components;
 @tailwind utilities;
 
+@media (prefers-reduced-transparency: reduce) {
+  .onboarding-material {
+    background: hsl(var(--background));
+    backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .onboarding-material {
+    background: hsl(var(--background));
+    border-color: hsl(var(--foreground) / 0.55);
+    backdrop-filter: none;
+  }
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;

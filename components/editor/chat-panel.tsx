@@ -12,6 +12,8 @@ import { useLocalStorage } from '@/hooks/use-local-storage';
 import { storageKeys } from '@/utils/storage-keys';
 import { toast } from 'sonner';
 import { logger } from '@/lib/logger';
+import { useAuth } from '@/hooks/use-clerk-auth';
+import { useChatAttachments } from '@/hooks/use-chat-attachments';
 
 const log = logger.child({ component: 'ChatPanel' });
 
@@ -21,6 +23,7 @@ interface ChatPanelProps {
   editorContent: EditorContent | string;
   onClose: () => void;
   onContentUpdate: (content: any) => void;
+  showHeader?: boolean;
 }
 
 export function ChatPanel({
@@ -29,6 +32,7 @@ export function ChatPanel({
   editorContent,
   onClose,
   onContentUpdate,
+  showHeader = true,
 }: ChatPanelProps) {
   const [mode, setMode] = useLocalStorage<MessageType>(storageKeys.localStorage.chatMode, 'ask');
   const [selectedModel, setSelectedModel] = useLocalStorage<AIModelName>(storageKeys.localStorage.chatModel, AI_MODELS.GOOGLE_PRO.model);
@@ -36,6 +40,17 @@ export function ChatPanel({
   const [isGenerating, setIsGenerating] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const saveMessage = useSaveMessage();
+  const { userId } = useAuth();
+  const { data: attachments } = useChatAttachments(sessionId);
+  const hasBlockingAttachments = attachments.some((attachment) => attachment.isSelected
+    && (attachment.processingStatus === 'queued' || attachment.processingStatus === 'processing'));
+
+  log.debug('Rendering script chat panel', {
+    action: 'render_script_chat_panel',
+    userId: userId || 'signed_out',
+    sessionId,
+    showHeader,
+  });
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -43,15 +58,27 @@ export function ChatPanel({
 
   const handleSend = async () => {
     if (!input.trim() || isGenerating) return;
+    if (hasBlockingAttachments) {
+      toast.info('Wait for selected files to finish scanning or deselect them');
+      log.info('Blocked chat send while selected files are processing', {
+        action: 'block_script_chat_send_for_processing_attachment',
+        userId: userId || 'signed_out',
+        sessionId,
+      });
+      return;
+    }
 
-    const sessionLog = log.child({ sessionId });
+    const sessionLog = log.child({
+      sessionId,
+      userId: userId || 'signed_out',
+    });
     const userMessage = input.trim();
     setInput('');
     setIsGenerating(true);
 
     try {
       sessionLog.info('User sent message', { mode, model: selectedModel });
-      await saveMessage.mutateAsync({
+      const savedUserMessage = await saveMessage.mutateAsync({
         sessionId,
         role: 'user',
         messageType: mode,
@@ -68,12 +95,14 @@ export function ChatPanel({
             currentContent: editorContent,
             sessionId,
             model: selectedModel,
+            messageId: savedUserMessage.id,
           }),
         });
 
-        if (!response.ok) throw new Error('Failed to get response');
-
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(data.error || `Failed to get response (${response.status})`);
+        }
         sessionLog.info('Received ask response');
 
         await saveMessage.mutateAsync({
@@ -92,12 +121,14 @@ export function ChatPanel({
             currentContent: editorContent,
             sessionId,
             model: selectedModel,
+            messageId: savedUserMessage.id,
           }),
         });
 
-        if (!response.ok) throw new Error('Failed to generate edit');
-
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(data.error || `Failed to generate edit (${response.status})`);
+        }
         sessionLog.info('Received edit proposal', {
           content: data.content,
           proposedChanges: data.proposedChanges
@@ -113,24 +144,30 @@ export function ChatPanel({
         });
       }
     } catch (error) {
-      sessionLog.error('Error in handleSend', error);
-      toast.error('Failed to send message');
-      console.error(error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to send message';
+      sessionLog.error('Error in handleSend', {
+        action: 'send_script_chat_message',
+        userId: userId || 'signed_out',
+        error,
+      });
+      toast.error(errorMessage);
     } finally {
       setIsGenerating(false);
     }
   };
   return (
     <div className="flex flex-col h-full bg-background relative overflow-hidden">
-      <div className="border-b px-4 py-1.5 flex items-center justify-between shrink-0 bg-background/95 backdrop-blur z-10 sticky top-0">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-primary" />
-          <h3 className="font-semibold text-sm">Assistant</h3>
+      {showHeader && (
+        <div className="border-b px-4 py-1.5 flex items-center justify-between shrink-0 bg-background/95 backdrop-blur z-10 sticky top-0">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-primary" />
+            <h3 className="font-semibold text-sm">Assistant</h3>
+          </div>
+          <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8 rounded-full">
+            <X className="h-4 w-4" />
+          </Button>
         </div>
-        <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8 rounded-full">
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
+      )}
 
       <div className="flex-1 overflow-auto px-4 py-4 space-y-4 custom-scrollbar pb-32">
         {messages.length === 0 ? (
@@ -171,6 +208,9 @@ export function ChatPanel({
         setMode={setMode}
         selectedModel={selectedModel}
         setSelectedModel={setSelectedModel}
+        parentId={sessionId}
+        attachments={attachments}
+        hasBlockingAttachments={hasBlockingAttachments}
       />
     </div>
   );

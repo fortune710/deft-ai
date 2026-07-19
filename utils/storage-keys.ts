@@ -2,6 +2,7 @@ export const storageKeys = {
   localStorage: {
     chatMode: 'chat-mode',
     chatModel: 'chat-model',
+    contentEngineView: 'content-engine-view',
   },
   reactQuery: {
     contentItem: (itemId: string) => ['content-item', itemId],

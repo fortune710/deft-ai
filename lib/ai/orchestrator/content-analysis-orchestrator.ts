@@ -1,4 +1,6 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { ConvexHttpClient } from 'convex/browser';
+import type { Id } from '@/convex/_generated/dataModel';
+import { api } from '@/convex/_generated/api';
 import type { AIFeedback, ContentAnalytics, ProcessingStep } from '@/types/content-analytics';
 import { downloadVideo, extractAudioFromVideo, extractThumbnailFromVideo } from '@/lib/services/video-processor';
 import { transcribeAudioFile } from '@/lib/services/transcription';
@@ -18,8 +20,9 @@ export interface ContentAnalysisOrchestratorLogger {
 }
 
 export interface ContentAnalysisOrchestratorOptions {
-  supabase: SupabaseClient;
-  analyticsId: string;
+  convex: ConvexHttpClient;
+  workerSecret: string;
+  analyticsId: Id<'content_analytics'>;
   userId: string;
   onProgress?: (event: ContentAnalysisProgressEvent) => void | Promise<void>;
   logger?: ContentAnalysisOrchestratorLogger;
@@ -33,25 +36,25 @@ export interface ContentAnalysisOrchestratorResult {
 export async function runContentAnalysisOrchestrator(
   options: ContentAnalysisOrchestratorOptions
 ): Promise<ContentAnalysisOrchestratorResult> {
-  const { supabase, analyticsId, userId, onProgress, logger } = options;
+  const { convex, workerSecret, analyticsId, userId, onProgress, logger } = options;
   const reportProgress = async (event: ContentAnalysisProgressEvent) => {
     await onProgress?.(event);
     logger?.log?.('Content analysis progress', { analyticsId, userId, ...event });
   };
 
-  const { data: content, error: contentError } = await supabase
-    .from('content_analytics')
-    .select('*')
-    .eq('id', analyticsId)
-    .maybeSingle();
+  const record = await convex.query(api.triggerWorkers.getContentAnalytics, {
+    workerSecret, userId, analyticsId,
+  });
+  const content = record ? { ...record, id: record._id } as unknown as ContentAnalytics : null;
 
-  if (contentError || !content) {
+  if (!content) {
     throw new Error(`Content not found for analytics ID ${analyticsId}`);
   }
 
   if (content.content_type === 'video') {
     await handleVideoContent({
-      supabase,
+      convex,
+      workerSecret,
       analyticsId,
       userId,
       content,
@@ -60,7 +63,8 @@ export async function runContentAnalysisOrchestrator(
     });
   } else {
     await handleTextContent({
-      supabase,
+      convex,
+      workerSecret,
       analyticsId,
       userId,
       content,
@@ -69,13 +73,14 @@ export async function runContentAnalysisOrchestrator(
     });
   }
 
-  const { data: refreshedContent, error: refreshedError } = await supabase
-    .from('content_analytics')
-    .select('*')
-    .eq('id', analyticsId)
-    .maybeSingle();
+  const refreshedRecord = await convex.query(api.triggerWorkers.getContentAnalytics, {
+    workerSecret, userId, analyticsId,
+  });
+  const refreshedContent = refreshedRecord
+    ? { ...refreshedRecord, id: refreshedRecord._id } as unknown as ContentAnalytics
+    : null;
 
-  if (refreshedError || !refreshedContent) {
+  if (!refreshedContent) {
     throw new Error(`Failed to reload content analytics record ${analyticsId}`);
   }
 
@@ -90,14 +95,15 @@ export async function runContentAnalysisOrchestrator(
 }
 
 async function handleVideoContent(params: {
-  supabase: SupabaseClient;
-  analyticsId: string;
+  convex: ConvexHttpClient;
+  workerSecret: string;
+  analyticsId: Id<'content_analytics'>;
   userId: string;
   content: ContentAnalytics;
   reportProgress: (event: ContentAnalysisProgressEvent) => Promise<void>;
   logger?: ContentAnalysisOrchestratorLogger;
 }): Promise<void> {
-  const { supabase, analyticsId, userId, content, reportProgress, logger } = params;
+  const { convex, workerSecret, analyticsId, userId, content, reportProgress, logger } = params;
 
   await reportProgress({
     step: 'download',
@@ -107,7 +113,7 @@ async function handleVideoContent(params: {
 
   let videoFilePath = content.video_file_path;
   if (!videoFilePath && content.video_url) {
-    const downloadResult = await downloadVideo(content.video_url, analyticsId, content.platform);
+    const downloadResult = await downloadVideo(content.video_url, analyticsId, content.platform, convex, workerSecret, userId);
     if (!downloadResult.success) {
       throw new Error(`Video download failed: ${downloadResult.error}`);
     }
@@ -118,7 +124,9 @@ async function handleVideoContent(params: {
     }
 
     await updateContentRecord(
-      supabase,
+      convex,
+      workerSecret,
+      userId,
       analyticsId,
       { video_file_path: videoFilePath },
       { required: true, label: 'video file path', logger }
@@ -131,12 +139,21 @@ async function handleVideoContent(params: {
     message: 'Extracting thumbnail',
   });
 
-  const thumbnailResult = await extractThumbnailFromVideo(analyticsId);
+  if (!videoFilePath) throw new Error('Video storage ID is missing');
+  const sourceUrl = await convex.query(api.triggerWorkers.getFileUrl, {
+    workerSecret,
+    storageId: videoFilePath as Id<'_storage'>,
+  });
+  if (!sourceUrl) throw new Error('Unable to resolve Convex video URL');
+
+  const thumbnailResult = await extractThumbnailFromVideo(sourceUrl, analyticsId, convex, workerSecret, userId);
   if (thumbnailResult.success && thumbnailResult.thumbnail_url) {
     await updateContentRecord(
-      supabase,
+      convex,
+      workerSecret,
+      userId,
       analyticsId,
-      { thumbnail_url: thumbnailResult.thumbnail_url },
+      { thumbnail_url: thumbnailResult.storage_path || thumbnailResult.thumbnail_url },
       { required: false, label: 'thumbnail URL', logger }
     );
   } else if (thumbnailResult.error) {
@@ -152,13 +169,15 @@ async function handleVideoContent(params: {
     message: 'Extracting audio',
   });
 
-  const audioResult = await extractAudioFromVideo(analyticsId);
+  const audioResult = await extractAudioFromVideo(sourceUrl, analyticsId, convex, workerSecret, userId);
   if (!audioResult.success || !audioResult.storage_path) {
     throw new Error(`Audio extraction failed: ${audioResult.error}`);
   }
 
   await updateContentRecord(
-    supabase,
+    convex,
+    workerSecret,
+    userId,
     analyticsId,
     { audio_file_path: audioResult.storage_path },
     { required: true, label: 'audio file path', logger }
@@ -170,47 +189,56 @@ async function handleVideoContent(params: {
     message: 'Transcribing audio',
   });
 
-  const transcriptionResult = await transcribeAudioFile(analyticsId);
+  const audioUrl = await convex.query(api.triggerWorkers.getFileUrl, {
+    workerSecret,
+    storageId: audioResult.storage_path as Id<'_storage'>,
+  });
+  if (!audioUrl) throw new Error('Unable to resolve Convex audio URL');
+  const transcriptionResult = await transcribeAudioFile(audioUrl);
   if (!transcriptionResult.success || !transcriptionResult.transcript) {
     throw new Error(`Transcription failed: ${transcriptionResult.error}`);
   }
 
   await updateContentRecord(
-    supabase,
+    convex,
+    workerSecret,
+    userId,
     analyticsId,
     { transcript: transcriptionResult.transcript },
     { required: true, label: 'transcript', logger }
   );
 
-  await analyzeContent({ supabase, analyticsId, userId, contentType: 'video', reportProgress, logger });
+  await analyzeContent({ convex, workerSecret, analyticsId, userId, contentType: 'video', reportProgress, logger });
 }
 
 async function handleTextContent(params: {
-  supabase: SupabaseClient;
-  analyticsId: string;
+  convex: ConvexHttpClient;
+  workerSecret: string;
+  analyticsId: Id<'content_analytics'>;
   userId: string;
   content: ContentAnalytics;
   reportProgress: (event: ContentAnalysisProgressEvent) => Promise<void>;
   logger?: ContentAnalysisOrchestratorLogger;
 }): Promise<void> {
-  const { supabase, analyticsId, userId, content, reportProgress, logger } = params;
+  const { convex, workerSecret, analyticsId, userId, content, reportProgress, logger } = params;
 
   if (!content.content_text || content.content_text.trim().length === 0) {
     throw new Error('Content text is required for text analysis');
   }
 
-  await analyzeContent({ supabase, analyticsId, userId, contentType: 'text', reportProgress, logger });
+  await analyzeContent({ convex, workerSecret, analyticsId, userId, contentType: 'text', reportProgress, logger });
 }
 
 async function analyzeContent(params: {
-  supabase: SupabaseClient;
-  analyticsId: string;
+  convex: ConvexHttpClient;
+  workerSecret: string;
+  analyticsId: Id<'content_analytics'>;
   userId: string;
   contentType: 'video' | 'text';
   reportProgress: (event: ContentAnalysisProgressEvent) => Promise<void>;
   logger?: ContentAnalysisOrchestratorLogger;
 }): Promise<void> {
-  const { supabase, analyticsId, userId, contentType, reportProgress, logger } = params;
+  const { convex, workerSecret, analyticsId, userId, contentType, reportProgress, logger } = params;
   const agent = new ContentAnalysisAgent();
 
   await reportProgress({
@@ -221,7 +249,8 @@ async function analyzeContent(params: {
 
   const feedbackResult = await agent.execute(
     {
-      supabase,
+      convex,
+      workerSecret,
       analyticsId,
       userId,
       contentType,
@@ -236,7 +265,9 @@ async function analyzeContent(params: {
   }
 
   await updateContentRecord(
-    supabase,
+    convex,
+    workerSecret,
+    userId,
     analyticsId,
     { analysis_results: feedbackResult.feedback },
     { required: true, label: 'analysis results', logger }
@@ -244,24 +275,28 @@ async function analyzeContent(params: {
 }
 
 async function updateContentRecord(
-  supabase: SupabaseClient,
-  analyticsId: string,
+  convex: ConvexHttpClient,
+  workerSecret: string,
+  userId: string,
+  analyticsId: Id<'content_analytics'>,
   updates: Partial<ContentAnalytics>,
   options: { required: boolean; label: string; logger?: ContentAnalysisOrchestratorLogger }
 ): Promise<void> {
   const { required, label, logger } = options;
-  const { error } = await supabase
-    .from('content_analytics')
-    .update(updates)
-    .eq('id', analyticsId);
-
-  if (error) {
+  try {
+    await convex.mutation(api.triggerWorkers.updateContentAnalytics, {
+      workerSecret,
+      userId,
+      analyticsId,
+      updates: updates as any,
+    });
+  } catch (error) {
     logger?.error?.(`Failed to update content analytics ${label}`, {
       analyticsId,
-      error: error.message,
+      error: error instanceof Error ? error.message : String(error),
     });
     if (required) {
-      throw new Error(`Failed to update content analytics ${label}: ${error.message}`);
+      throw new Error(`Failed to update content analytics ${label}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 }

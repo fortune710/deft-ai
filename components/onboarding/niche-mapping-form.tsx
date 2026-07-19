@@ -1,9 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { AnimatePresence } from 'framer-motion';
-import { Button } from '@/components/ui/button';
-import { ArrowRight, ArrowLeft, Loader2 } from 'lucide-react';
+import { AnimatePresence, useReducedMotion } from 'framer-motion';
 import { OnboardingFormData } from '@/types/niche-mapping';
 import { Step1ChatAgent } from './steps/step-1-chat-agent';
 import { Step2Goal } from './steps/step-2-goal';
@@ -17,13 +15,20 @@ import {
   step4Schema,
   step5Schema,
 } from '@/lib/validations/onboarding/questions';
+import { useAuth } from '@/hooks/use-clerk-auth';
+import { logger } from '@/lib/logger';
+
+const log = logger.child({ module: 'components/onboarding/niche-mapping-form' });
 
 interface NicheMappingFormProps {
   onComplete: (data: OnboardingFormData) => Promise<void>;
 }
 
 export function NicheMappingForm({ onComplete }: NicheMappingFormProps) {
+  const { userId } = useAuth();
+  const shouldReduceMotion = useReducedMotion();
   const [currentStep, setCurrentStep] = useState(1);
+  const [direction, setDirection] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -39,6 +44,11 @@ export function NicheMappingForm({ onComplete }: NicheMappingFormProps) {
   const progressPercentage = (currentStep / totalSteps) * 100;
 
   const validateStep = (step: number): boolean => {
+    log.debug('Validating onboarding step', {
+      userId: userId || 'signed_out',
+      action: 'validate_onboarding_step',
+      step,
+    });
     setErrors({});
 
     try {
@@ -69,6 +79,11 @@ export function NicheMappingForm({ onComplete }: NicheMappingFormProps) {
           });
           break;
       }
+      log.info('Validated onboarding step', {
+        userId: userId || 'signed_out',
+        action: 'validate_onboarding_step',
+        step,
+      });
       return true;
     } catch (error: any) {
       if (error.errors) {
@@ -78,26 +93,49 @@ export function NicheMappingForm({ onComplete }: NicheMappingFormProps) {
         });
         setErrors(newErrors);
       }
+      log.warn('Onboarding step validation failed', {
+        userId: userId || 'signed_out',
+        action: 'validate_onboarding_step',
+        step,
+        error,
+      });
       return false;
     }
   };
 
   const handleNext = () => {
+    log.debug('Advancing onboarding step', {
+      userId: userId || 'signed_out',
+      action: 'advance_onboarding_step',
+      currentStep,
+    });
     if (validateStep(currentStep)) {
       if (currentStep < totalSteps) {
+        setDirection(1);
         setCurrentStep(currentStep + 1);
       }
     }
   };
 
   const handleBack = () => {
+    log.debug('Returning to previous onboarding step', {
+      userId: userId || 'signed_out',
+      action: 'return_onboarding_step',
+      currentStep,
+    });
     if (currentStep > 1) {
+      setDirection(-1);
       setCurrentStep(currentStep - 1);
       setErrors({});
     }
   };
 
   const handleSubmit = async () => {
+    log.info('Submitting onboarding profile', {
+      userId: userId || 'signed_out',
+      action: 'submit_onboarding_profile',
+      currentStep,
+    });
     if (!validateStep(currentStep)) return;
 
     setIsSubmitting(true);
@@ -105,7 +143,11 @@ export function NicheMappingForm({ onComplete }: NicheMappingFormProps) {
     try {
       await onComplete(formData);
     } catch (error) {
-      console.error('Error submitting form:', error);
+      log.error('Onboarding profile submission failed', {
+        userId: userId || 'signed_out',
+        action: 'submit_onboarding_profile',
+        error,
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -114,7 +156,7 @@ export function NicheMappingForm({ onComplete }: NicheMappingFormProps) {
   return (
     <div className="w-full h-full flex flex-col relative min-h-screen">
       {/* Sticky Header: Progress Bar */}
-      <div className="sticky top-0 z-50 bg-background/60 backdrop-blur-xl border-b border-border/40 py-6 px-6 shadow-sm">
+      <div className="onboarding-material sticky top-0 z-50 border-b border-border/40 bg-background/75 px-6 py-5 shadow-sm backdrop-blur-xl">
         <div className="max-w-5xl mx-auto space-y-3">
           <div className="flex justify-between items-center">
             <span className="text-sm font-medium text-muted-foreground">
@@ -125,13 +167,11 @@ export function NicheMappingForm({ onComplete }: NicheMappingFormProps) {
             </span>
           </div>
 
-          <div className="relative h-2 bg-muted/30 rounded-full overflow-hidden">
+          <div className="relative h-1.5 overflow-hidden rounded-full bg-muted/50">
             <div
-              className="absolute inset-y-0 left-0 bg-primary transition-all duration-500 ease-out rounded-full"
-              style={{ width: `${progressPercentage}%` }}
-            >
-              <div className="absolute inset-0 bg-white/20 animate-pulse" />
-            </div>
+              className="absolute inset-0 origin-left rounded-full bg-primary transition-transform duration-300 [transition-timing-function:cubic-bezier(0.77,0,0.175,1)] motion-reduce:transition-none"
+              style={{ transform: `scaleX(${progressPercentage / 100})` }}
+            />
           </div>
         </div>
       </div>
@@ -139,7 +179,7 @@ export function NicheMappingForm({ onComplete }: NicheMappingFormProps) {
       {/* Main Content: Steps */}
       <div className="flex-1 w-full max-w-5xl mx-auto px-6 py-8 flex flex-col">
         <div className="flex-1 w-full">
-          <AnimatePresence mode="wait">
+          <AnimatePresence initial={false} mode="sync" custom={direction}>
             {currentStep === 1 && (
               <Step1ChatAgent
                 key="step-1"
@@ -149,6 +189,8 @@ export function NicheMappingForm({ onComplete }: NicheMappingFormProps) {
                   handleNext();
                 }}
                 error={errors.question_1_niche}
+                direction={direction}
+                shouldReduceMotion={Boolean(shouldReduceMotion)}
               />
             )}
             {currentStep === 2 && (
@@ -161,6 +203,8 @@ export function NicheMappingForm({ onComplete }: NicheMappingFormProps) {
                 onBack={handleBack}
                 onNext={handleNext}
                 error={errors.question_2_goal}
+                direction={direction}
+                shouldReduceMotion={Boolean(shouldReduceMotion)}
               />
             )}
             {currentStep === 3 && (
@@ -173,6 +217,8 @@ export function NicheMappingForm({ onComplete }: NicheMappingFormProps) {
                 onBack={handleBack}
                 onNext={handleNext}
                 error={errors.question_3_platforms}
+                direction={direction}
+                shouldReduceMotion={Boolean(shouldReduceMotion)}
               />
             )}
             {currentStep === 4 && (
@@ -185,6 +231,8 @@ export function NicheMappingForm({ onComplete }: NicheMappingFormProps) {
                 onBack={handleBack}
                 onNext={handleNext}
                 error={errors.question_4_experience}
+                direction={direction}
+                shouldReduceMotion={Boolean(shouldReduceMotion)}
               />
             )}
             {currentStep === 5 && (
@@ -198,6 +246,8 @@ export function NicheMappingForm({ onComplete }: NicheMappingFormProps) {
                 onNext={handleSubmit}
                 isSubmitting={isSubmitting}
                 error={errors.question_5_frequency}
+                direction={direction}
+                shouldReduceMotion={Boolean(shouldReduceMotion)}
               />
             )}
           </AnimatePresence>

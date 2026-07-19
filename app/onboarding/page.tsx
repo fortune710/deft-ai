@@ -1,32 +1,42 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { supabase } from '@/lib/supabase/client';
+import { useState } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
-import { Sparkles, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { NicheMappingForm } from '@/components/onboarding/niche-mapping-form';
 import { saveContentProfile } from '@/app/actions/onboarding';
 import { OnboardingFormData } from '@/types/niche-mapping';
-import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { generateAIContextClient, buildSystemPrompt } from '@/lib/ai/gemini-client';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/hooks/use-clerk-auth';
+import { logger } from '@/lib/logger';
+
+const log = logger.child({ module: 'app/onboarding/page' });
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const { userId } = useAuth();
+  const shouldReduceMotion = useReducedMotion();
   const [error, setError] = useState<string | null>(null);
 
 
   const handleComplete = async (data: OnboardingFormData) => {
+    log.info('Saving completed onboarding profile', {
+      userId: userId || 'signed_out',
+      action: 'save_onboarding_profile',
+    });
     setError(null);
 
     try {
-      console.log('Saving content profile...');
       const result = await saveContentProfile(data);
-      console.log('Save result:', result);
 
       if (result.success) {
+        log.info('Saved completed onboarding profile', {
+          userId: userId || 'signed_out',
+          action: 'save_onboarding_profile',
+          status: 'success',
+        });
         setTimeout(() => {
           router.push('/content-engine');
         }, 2000);
@@ -34,13 +44,22 @@ export default function OnboardingPage() {
         throw new Error(result.error || 'Failed to save profile');
       }
     } catch (error: any) {
-      console.error('Error in handleComplete:', error);
+      log.error('Failed to save completed onboarding profile', {
+        userId: userId || 'signed_out',
+        action: 'save_onboarding_profile',
+        error,
+        message: error?.message || String(error),
+      });
       const errorMessage = error?.message || 'An unexpected error occurred. Please try again.';
       setError(errorMessage);
     }
   };
 
   const handleRetry = () => {
+    log.info('Cleared onboarding submission error', {
+      userId: userId || 'signed_out',
+      action: 'retry_onboarding_submission',
+    });
     setError(null);
   };
 
@@ -54,7 +73,7 @@ export default function OnboardingPage() {
 
         {/* Animated Glows */}
         <motion.div
-          animate={{
+          animate={shouldReduceMotion ? { opacity: 0.18 } : {
             scale: [1, 1.2, 1],
             opacity: [0.15, 0.25, 0.15],
             x: [0, 50, 0],
@@ -64,7 +83,7 @@ export default function OnboardingPage() {
           className="absolute -top-[10%] -left-[10%] w-[60%] h-[60%] bg-primary/20 rounded-full blur-[120px]"
         />
         <motion.div
-          animate={{
+          animate={shouldReduceMotion ? { opacity: 0.14 } : {
             scale: [1.2, 1, 1.2],
             opacity: [0.1, 0.2, 0.1],
             x: [0, -40, 0],
@@ -100,7 +119,7 @@ export default function OnboardingPage() {
                     </Button>
                   </div>
                   <p className="text-xs opacity-80">
-                    Check the browser console for more details. If the error persists, try restarting the dev server.
+                    Your answers are still here. Try again, and contact support if the problem persists.
                   </p>
                 </div>
               </AlertDescription>

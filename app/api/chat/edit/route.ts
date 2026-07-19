@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateEditProposal } from '@/lib/ai/instant-execution-generator';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { logger } from '@/lib/logger';
+import { logger } from '@/lib/logger.server';
 import { ScriptGenerationError } from '@/lib/errors/content-generation/scripts';
-import { TABLES } from '@/lib/supabase/constants';
+import { api } from '@/convex/_generated/api';
+import { ConvexServerAuthError, getAuthenticatedConvexClient, toUserContentProfile } from '@/lib/convex/server';
+import type { Id } from '@/convex/_generated/dataModel';
+import { generateAttachmentAwareEdit } from '@/lib/ai/attachments/chat-agent';
 
 export async function POST(req: NextRequest) {
   const startTime = Date.now();
@@ -11,31 +13,17 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { editRequest = '', currentContent, sessionId = 'unknown', model = 'unknown' } = body;
+    const { editRequest = '', currentContent, sessionId = 'unknown', model = 'unknown', messageId = '' } = body;
 
-    const supabase = await createServerSupabaseClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      throw new ScriptGenerationError(
-        'Unauthorized' + `Status Code: 401`,
-        model,
-        editRequest,
-        null,
-        sessionId
-      );
-    }
-
-    const userId = user.id;
+    const authenticated = await getAuthenticatedConvexClient('edit_script');
+    const userId = authenticated.userId;
 
     log = log.child({ sessionId, model, userId });
     log.info('Processing edit request', { editRequestLength: editRequest?.length });
 
-    if (!editRequest) {
+    if (!editRequest || !messageId) {
       throw new ScriptGenerationError(
-        'Edit request is required',
+        'Edit request and message ID are required',
         model,
         editRequest,
         userId,
@@ -45,25 +33,36 @@ export async function POST(req: NextRequest) {
 
 
 
-    const { data: profile, error: profileError } = await supabase
-      .from(TABLES.USER_CONTENT_PROFILE)
-      .select('*')
-      .eq('user_id', userId)
-      .maybeSingle();
-
-    if (profileError) {
-      throw new ScriptGenerationError(
-        `Failed to fetch user profile: ${profileError.message}`,
-        model,
-        editRequest,
-        userId,
-        sessionId
-      );
+    const profileDocument = await authenticated.convex.query(api.userContentProfiles.getCurrent, {});
+    const profile = toUserContentProfile(profileDocument);
+    const messageContext = await authenticated.convex.query(api.scriptChats.getMessageContext, {
+      messageId: messageId as Id<'script_chat_messages'>,
+    });
+    if (messageContext.message.content !== editRequest) {
+      return NextResponse.json({ error: 'Message content does not match the saved chat message' }, { status: 409 });
     }
 
     let result;
     try {
-      result = await generateEditProposal(editRequest, currentContent, profile, model);
+      result = messageContext.message.attachment_refs?.length
+        ? await generateAttachmentAwareEdit({
+            request: editRequest,
+            currentContent,
+            userProfile: profile,
+            modelName: model,
+            userId,
+            messageId: messageId as Id<'script_chat_messages'>,
+            convex: authenticated.convex,
+            history: messageContext.history.map((message) => ({ role: message.role, content: message.content })),
+          })
+        : await generateEditProposal(
+            editRequest,
+            currentContent,
+            profile,
+            model,
+            userId,
+            sessionId,
+          );
     } catch (genError) {
       throw new ScriptGenerationError(
         genError instanceof Error ? genError.message : 'Failed to generate edit proposal',
@@ -83,6 +82,15 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(result);
   } catch (error) {
+    if (error instanceof ConvexServerAuthError) {
+      log.error('Convex authentication failed for script edit', {
+        userId: 'signed_out',
+        action: 'edit_script',
+        statusCode: error.statusCode,
+        error,
+      });
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
     if (error instanceof ScriptGenerationError) {
       log.error('Script generation error encountered', {
         err: error,
@@ -92,7 +100,7 @@ export async function POST(req: NextRequest) {
         sessionId: error.sessionId,
       });
 
-      const status = error.message === 'Edit request is required' ? 400 :
+      const status = error.message === 'Edit request and message ID are required' ? 400 :
         error.message === 'Unauthorized' ? 401 : 500;
 
       return NextResponse.json({ error: error.message }, { status });

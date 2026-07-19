@@ -2,7 +2,7 @@
 
 import { ChatMessage as ChatMessageType, EditorContent } from '@/types/script-chat';
 import { Button } from '../ui/button';
-import { Check, X } from 'lucide-react';
+import { Check, Paperclip, X } from 'lucide-react';
 import { useUpdateMessageStatus, useUpdateEditorContent } from '@/hooks/use-script-chats';
 import { toast } from 'sonner';
 import { EditProposalDisplay } from './edit-proposal-display';
@@ -140,9 +140,9 @@ export function ChatMessage({ message, sessionId, onContentUpdate, editorContent
   return (
     <div className={cn("flex", isUser ? 'justify-end' : 'justify-start')}>
       <div
-        className={cn("max-w-[87%] rounded-lg px-3 py-2", isUser
-          ? 'bg-primary text-primary-foreground'
-          : ''
+        className={cn("max-w-[87%] px-3 py-2", isUser
+          ? 'rounded-xl border border-border/50 bg-[#2A2A2A]/40 text-foreground dark:bg-[#1E1E1E]'
+          : 'rounded-lg'
         )}
       >
         <div className="text-sm">
@@ -156,6 +156,20 @@ export function ChatMessage({ message, sessionId, onContentUpdate, editorContent
             <div className="whitespace-pre-wrap">{message.content}</div>
           )}
         </div>
+
+        {isUser && message.attachment_refs.length > 0 && (
+          <div className="mt-2 flex flex-wrap justify-end gap-1" aria-label="Files available for this message">
+            {message.attachment_refs.map((reference) => (
+              <span
+                key={reference.attachmentId}
+                className="inline-flex max-w-full items-center gap-1 rounded-md border border-border/50 bg-background/30 px-1.5 py-1 text-[10px] text-muted-foreground"
+              >
+                <Paperclip className="h-2.5 w-2.5 shrink-0" />
+                <span className="truncate">{reference.fileName}</span>
+              </span>
+            ))}
+          </div>
+        )}
 
         {message.message_type === 'edit' &&
           message.role === 'assistant' &&
@@ -195,9 +209,6 @@ export function ChatMessage({ message, sessionId, onContentUpdate, editorContent
           <div className="mt-2 text-xs opacity-70">✗ Changes rejected</div>
         )}
 
-        <div className="text-xs opacity-70 mt-2">
-          {new Date(message.created_at).toLocaleTimeString()}
-        </div>
       </div>
     </div>
   );

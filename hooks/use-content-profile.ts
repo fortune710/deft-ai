@@ -1,47 +1,70 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase/client';
-import { UserContentProfile } from '@/types/niche-mapping';
+'use client';
 
-async function fetchContentProfile(): Promise<UserContentProfile | null> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+import { useConvexAuth, useQuery as useConvexQuery } from 'convex/react';
 
-  if (!user) {
-    return null;
-  }
+import { api } from '@/convex/_generated/api';
+import type { Doc } from '@/convex/_generated/dataModel';
+import { useAuth } from '@/hooks/use-clerk-auth';
+import { logger } from '@/lib/logger';
+import type { UserContentProfile } from '@/types/niche-mapping';
 
-  const { data, error } = await supabase
-    .from('user_content_profile')
-    .select('*')
-    .eq('user_id', user.id)
-    .maybeSingle();
+const log = logger.child({ module: 'hooks/use-content-profile' });
 
-  if (error) {
-    throw error;
-  }
+function toContentProfile(
+  document: Doc<'user_content_profile'>,
+): UserContentProfile {
+  log.debug('Mapping Convex content profile', {
+    userId: document.user_id,
+    action: 'map_content_profile',
+    profileId: document._id,
+  });
 
-  return data;
+  return {
+    id: document._id,
+    user_id: document.user_id,
+    question_1_niche: document.question_1_niche,
+    question_2_goal: document.question_2_goal ?? null,
+    question_3_platforms: document.question_3_platforms,
+    question_4_experience: document.question_4_experience ?? null,
+    question_5_frequency: document.question_5_frequency ?? null,
+    completed_at: document.completed_at ?? null,
+    created_at: document.created_at ?? new Date(document._creationTime).toISOString(),
+    updated_at: document.updated_at ?? new Date(document._creationTime).toISOString(),
+  };
 }
 
 export function useContentProfile() {
-  const queryClient = useQueryClient();
+  const { userId, isLoaded } = useAuth();
+  const { isAuthenticated: isConvexAuthenticated, isLoading: isConvexAuthLoading } = useConvexAuth();
+  const document = useConvexQuery(
+    api.userContentProfiles.getCurrent,
+    userId && isConvexAuthenticated ? {} : 'skip',
+  );
+  const profile = document ? toContentProfile(document) : null;
+  const isLoading =
+    !isLoaded ||
+    isConvexAuthLoading ||
+    (Boolean(userId) && isConvexAuthenticated && document === undefined);
 
-  const { data: profile, isLoading, error } = useQuery({
-    queryKey: ['content-profile'],
-    queryFn: fetchContentProfile,
-    staleTime: 5 * 60 * 1000,
-    retry: 1,
+  log.debug('Resolved Convex content profile query', {
+    userId: userId || 'signed_out',
+    action: 'fetch_content_profile',
+    isLoading,
+    hasProfile: Boolean(profile),
+    isConvexAuthenticated,
   });
 
   const refreshProfile = () => {
-    queryClient.invalidateQueries({ queryKey: ['content-profile'] });
+    log.debug('Skipped manual content profile refresh because Convex is realtime', {
+      userId: userId || 'signed_out',
+      action: 'refresh_content_profile',
+    });
   };
 
   return {
     profile,
     isLoading,
-    error: error ? String(error) : null,
+    error: null,
     refreshProfile,
   };
 }

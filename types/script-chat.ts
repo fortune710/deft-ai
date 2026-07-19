@@ -1,3 +1,5 @@
+import type { AttachmentReference } from '@/types/chat-attachments';
+
 export type MessageRole = 'user' | 'assistant';
 export type MessageType = 'ask' | 'edit';
 export type ChangeStatus = 'pending' | 'accepted' | 'rejected';
@@ -67,6 +69,7 @@ export interface ChatMessage {
   proposed_changes?: EditProposal[];
   change_status?: ChangeStatus;
   created_at: string;
+  attachment_refs: AttachmentReference[];
 }
 
 export interface ChatSession {

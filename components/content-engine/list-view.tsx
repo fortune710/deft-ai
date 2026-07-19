@@ -1,11 +1,10 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { createElement, useState, useMemo } from 'react';
+import type { ElementType } from 'react';
 import { format } from 'date-fns';
-import { Search, Eye, Copy, Trash2, Calendar as CalendarIcon, MoreVertical } from 'lucide-react';
-import { Input } from '@/components/ui/input';
+import { Eye, Copy, Trash2, MoreVertical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Calendar } from '@/components/ui/calendar';
 import {
   Popover,
@@ -29,13 +28,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
   Table,
   TableBody,
   TableCell,
@@ -46,9 +38,19 @@ import {
 import { ContentItemDialog } from './content-item-dialog';
 import { useDeleteContentItem, useDuplicateContentItem, useUpdateContentItem, useUpdateItemStatus } from '@/hooks/use-content-items';
 import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
 import type { ContentItem, ItemStatus, Platform } from '@/types/content-engine';
 import Link from 'next/link';
+import { logger } from '@/lib/logger';
+import { useAuth } from '@/hooks/use-clerk-auth';
+import { BaselineFacebook } from '@/components/icons/facebook';
+import { Instagram } from '@/components/icons/instagram';
+import { Linkedin } from '@/components/icons/linkedin';
+import { BaselineTiktok } from '@/components/icons/tiktok';
+import { Twitter } from '@/components/icons/twitter';
+import { YoutubeLine } from '@/components/icons/youtube';
+import { ArrowRightUpLine } from '@/components/icons/arrow-right-up';
+
+const log = logger.child({ module: 'components/content-engine/list-view' });
 
 interface ListViewProps {
   items: ContentItem[];
@@ -62,19 +64,21 @@ interface ListViewProps {
   setSortBy: (s: 'date' | 'title' | 'platform') => void;
 }
 
-const statusOptions: { value: ItemStatus | 'all'; label: string; color: string }[] = [
-  { value: 'all', label: 'All Status', color: '' },
-  { value: 'idea', label: 'Idea', color: 'bg-gray-100 text-gray-700' },
-  { value: 'in_progress', label: 'In Progress', color: 'bg-blue-100 text-blue-700' },
-  { value: 'ready', label: 'Ready', color: 'bg-green-100 text-green-700' },
-  { value: 'published', label: 'Published', color: 'bg-purple-100 text-purple-700' },
+const statusOptions: { value: ItemStatus | 'all'; label: string; color: string; dotColor: string }[] = [
+  { value: 'all', label: 'All Status', color: '', dotColor: '' },
+  { value: 'idea', label: 'Idea', color: 'bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300', dotColor: 'bg-zinc-400' },
+  { value: 'in_progress', label: 'In Progress', color: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300', dotColor: 'bg-amber-400' },
+  { value: 'ready', label: 'Ready', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300', dotColor: 'bg-emerald-500' },
+  { value: 'published', label: 'Published', color: 'bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300', dotColor: 'bg-violet-500' },
 ];
 
-const statusDotColors: Record<string, string> = {
-  idea: 'bg-gray-500',
-  in_progress: 'bg-blue-500',
-  ready: 'bg-green-500',
-  published: 'bg-purple-500',
+const platformIcons: Record<Platform, ElementType> = {
+  youtube: YoutubeLine,
+  instagram: Instagram,
+  tiktok: BaselineTiktok,
+  twitter: Twitter,
+  linkedin: Linkedin,
+  facebook: BaselineFacebook,
 };
 
 const platformLabels: Record<Platform, string> = {
@@ -97,6 +101,7 @@ export function ListView({
   sortBy,
   setSortBy
 }: ListViewProps) {
+  const { userId } = useAuth();
   const [selectedItem, setSelectedItem] = useState<ContentItem | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -106,6 +111,14 @@ export function ListView({
   const duplicateItem = useDuplicateContentItem();
   const updateStatus = useUpdateItemStatus();
   const updateItem = useUpdateContentItem();
+
+  log.debug('Rendering content item table', {
+    userId: userId || 'signed_out',
+    action: 'render_content_item_table',
+    itemCount: items.length,
+    statusFilter,
+    platformFilter,
+  });
 
   const filteredAndSortedItems = useMemo(() => {
     let filtered = [...items];
@@ -225,15 +238,20 @@ export function ListView({
     const [open, setOpen] = useState(false);
     const selectedDate = item.scheduled_date ? new Date(item.scheduled_date) : new Date();
 
+    log.debug('Rendering content schedule date picker', {
+      userId: userId || 'signed_out',
+      action: 'render_content_schedule_date_picker',
+      itemId: item.id,
+    });
+
     return (
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 px-2 rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="h-7 rounded-lg px-2 text-xs text-foreground/80 hover:bg-muted hover:text-foreground"
           >
-            <CalendarIcon className="h-3.5 w-3.5 mr-1 text-gray-400" />
             {format(selectedDate, 'MMM d, yyyy')}
           </Button>
         </PopoverTrigger>
@@ -257,16 +275,15 @@ export function ListView({
     <>
       <div className="space-y-4">
 
-        <div className="border border-gray-100 dark:border-gray-800 rounded-xl bg-transparent shadow-none overflow-hidden sm:overflow-auto">
-          <Table>
-            <TableHeader className="bg-gray-50/50 dark:bg-gray-800/20 border-b border-gray-100 dark:border-gray-800">
+        <div className="overflow-hidden rounded-xl border border-border/60 bg-background shadow-none sm:overflow-auto">
+          <Table className="[&_td]:px-3 [&_td]:py-2 [&_th]:px-3">
+            <TableHeader className="border-b border-border/60 bg-muted/20">
               <TableRow className="hover:bg-transparent border-none">
-                <TableHead className="text-[10px] h-11 uppercase tracking-widest font-bold text-gray-500 dark:text-gray-400">Title</TableHead>
-                <TableHead className="text-[10px] h-11 uppercase tracking-widest font-bold text-gray-500 dark:text-gray-400">Platform</TableHead>
-                <TableHead className="text-[10px] h-11 uppercase tracking-widest font-bold text-gray-500 dark:text-gray-400">Schedule</TableHead>
-                <TableHead className="text-[10px] h-11 uppercase tracking-widest font-bold text-gray-500 dark:text-gray-400">Status</TableHead>
-                <TableHead className="text-[10px] h-11 uppercase tracking-widest font-bold text-gray-500 dark:text-gray-400">Hook</TableHead>
-                <TableHead className="text-right text-[10px] h-11 uppercase tracking-widest font-bold text-gray-500 dark:text-gray-400 w-12"></TableHead>
+                <TableHead className="h-9 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Title</TableHead>
+                <TableHead className="h-9 w-20 whitespace-nowrap text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Platform</TableHead>
+                <TableHead className="h-9 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Schedule</TableHead>
+                <TableHead className="h-9 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Status</TableHead>
+                <TableHead className="h-9 w-12 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground"><span className="sr-only">Actions</span></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -275,31 +292,31 @@ export function ListView({
                 return (
                   <TableRow
                     key={item.id}
-                    className="hover:bg-primary/5 dark:hover:bg-primary/10 border-gray-100 dark:border-gray-800 transition-colors"
+                    className="border-border/50 hover:bg-transparent dark:hover:bg-transparent"
                   >
-                    <TableCell className="font-medium max-w-[250px] text-gray-900 dark:text-gray-100">
-                      <div className="line-clamp-1">{item.title}</div>
-                      {item.description && (
-                        <div className="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-1 mt-0.5">
-                          {item.description}
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "px-2.5 py-0.5 text-[10px] uppercase font-black tracking-widest",
-                          item.platform === 'youtube' && "bg-red-500/10 text-red-600 border-red-500/20",
-                          item.platform === 'instagram' && "bg-pink-500/10 text-pink-600 border-pink-500/20",
-                          item.platform === 'tiktok' && "bg-cyan-500/10 text-cyan-600 border-cyan-500/20",
-                          item.platform === 'twitter' && "bg-blue-500/10 text-blue-600 border-blue-500/20",
-                          item.platform === 'linkedin' && "bg-indigo-500/10 text-indigo-600 border-indigo-500/20",
-                          item.platform === 'facebook' && "bg-blue-600/10 text-blue-700 border-blue-600/20"
-                        )}
+                    <TableCell className="w-[36%] min-w-[260px] max-w-[420px] font-medium text-gray-900 dark:text-gray-100">
+                      <Link
+                        href={`/script-creator/edit-content/${item.id}`}
+                        className="group/title flex max-w-full items-center gap-2 pr-4 text-inherit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                       >
-                        {platformLabels[item.platform] || item.platform}
-                      </Badge>
+                        <span className="min-w-0 flex-1 truncate">{item.title}</span>
+                        <ArrowRightUpLine
+                          className="h-3.5 w-3.5 shrink-0 -translate-x-1 translate-y-1 opacity-0 transition-[opacity,transform] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover/title:translate-x-0 group-hover/title:translate-y-0 group-hover/title:opacity-100 group-focus-visible/title:translate-x-0 group-focus-visible/title:translate-y-0 group-focus-visible/title:opacity-100 motion-reduce:transform-none"
+                          aria-hidden="true"
+                        />
+                      </Link>
+                    </TableCell>
+                    <TableCell className="w-20">
+                      <span
+                        className="inline-flex h-6 w-6 items-center justify-center text-muted-foreground"
+                        title={platformLabels[item.platform]}
+                        aria-label={platformLabels[item.platform]}
+                      >
+                        {createElement(platformIcons[item.platform], {
+                          'aria-hidden': true,
+                          className: 'h-[18px] w-[18px]',
+                        })}
+                      </span>
                     </TableCell>
                     <TableCell>
                       <ScheduleDatePicker item={item} />
@@ -307,55 +324,46 @@ export function ListView({
                     <TableCell>
                       <DropdownMenu modal={false}>
                         <DropdownMenuTrigger asChild>
-                          <button className="outline-none group">
-                            <Badge
-                              className={cn(
-                                "cursor-pointer transition-all hover:opacity-80 active:scale-95",
-                                statusOption?.color,
-                                "px-3 py-1.5 text-xs font-bold rounded-md border-none flex items-center gap-1.5"
-                              )}
-                            >
+                          <button className="group outline-none">
+                            <span className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium transition-opacity hover:opacity-80 ${statusOption?.color}`}>
+                              <span className={`h-1.5 w-1.5 rounded-full ${statusOption?.dotColor}`} aria-hidden="true" />
                               {statusOption?.label}
-                            </Badge>
+                            </span>
                           </button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="min-w-[140px] p-1 rounded-xl shadow-lg border-gray-200 dark:border-gray-800">
+                        <DropdownMenuContent align="start" className="min-w-[140px] rounded-xl p-1">
                           {statusOptions.slice(1).map((option) => (
                             <DropdownMenuItem
                               key={option.value}
                               onSelect={() => handleStatusChange(item.id, option.value as ItemStatus)}
-                              className="flex items-center gap-2 px-2 py-1.5 cursor-pointer rounded-md focus:bg-gray-100 dark:focus:bg-gray-800"
+                              className={`h-6 cursor-pointer gap-1.5 rounded-[7px] px-2 text-xs transition-colors duration-150 focus:bg-primary focus:text-primary-foreground ${item.status === option.value ? 'bg-secondary text-foreground' : 'text-muted-foreground'}`}
                             >
-                              <span className="text-xs font-semibold">{option.label}</span>
+                              <span className={`h-1.5 w-1.5 rounded-full ${option.dotColor}`} aria-hidden="true" />
+                              <span>{option.label}</span>
                             </DropdownMenuItem>
                           ))}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
-                    <TableCell className="max-w-[300px]">
-                      <div className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2">
-                        {item.content.hook_suggestion || 'No hook yet'}
-                      </div>
-                    </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-500">
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-gray-500">
                             <MoreVertical className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-32 rounded-xl">
-                          <DropdownMenuItem asChild className="cursor-pointer gap-2 rounded-lg">
+                        <DropdownMenuContent align="end" className="z-[100] w-32 rounded-xl p-1">
+                          <DropdownMenuItem asChild className="h-6 cursor-pointer gap-2 rounded-[7px] px-2 text-xs text-muted-foreground transition-colors duration-150 focus:bg-primary focus:text-primary-foreground">
                             <Link href={`/script-creator/edit-content/${item.id}`}>
                               <Eye className="h-3.5 w-3.5" />
                               <span>View</span>
                             </Link>
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleDuplicate(item.id)} className="cursor-pointer gap-2 rounded-lg">
+                          <DropdownMenuItem onClick={() => handleDuplicate(item.id)} className="h-6 cursor-pointer gap-2 rounded-[7px] px-2 text-xs text-muted-foreground transition-colors duration-150 focus:bg-primary focus:text-primary-foreground">
                             <Copy className="h-3.5 w-3.5" />
                             <span>Duplicate</span>
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleDelete(item.id)} className="cursor-pointer gap-2 rounded-lg text-red-600 focus:text-red-600">
+                          <DropdownMenuItem onClick={() => handleDelete(item.id)} className="h-6 cursor-pointer gap-2 rounded-[7px] px-2 text-xs text-muted-foreground transition-colors duration-150 focus:bg-primary focus:text-primary-foreground">
                             <Trash2 className="h-3.5 w-3.5" />
                             <span>Delete</span>
                           </DropdownMenuItem>

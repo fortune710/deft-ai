@@ -1,39 +1,26 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase/client';
+import { useQuery } from 'convex/react';
+import type { Id } from '@/convex/_generated/dataModel';
+import { api } from '@/convex/_generated/api';
 import type { ContentAnalytics } from '@/types/content-analytics';
+import { useAuth } from '@/hooks/use-clerk-auth';
+import { logger } from '@/lib/logger';
 
-async function fetchContentAnalyticsItem(id: string): Promise<ContentAnalytics | null> {
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError || !user?.id) {
-    throw new Error('Unauthorized');
-  }
-
-  const { data, error } = await supabase
-    .from('content_analytics')
-    .select('*')
-    .eq('id', id)
-    .eq('user_id', user.id)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return (data as ContentAnalytics | null) ?? null;
-}
+const log = logger.child({ module: 'hooks/use-content-analytics-item' });
 
 export function useContentAnalyticsItem(id: string) {
-  return useQuery({
-    queryKey: ['content-analytics-item', id],
-    queryFn: () => fetchContentAnalyticsItem(id),
-    enabled: !!id,
-    staleTime: 15_000,
+  const { userId } = useAuth();
+  const record = useQuery(
+    api.contentAnalytics.get,
+    userId && id ? { analyticsId: id as Id<'content_analytics'> } : 'skip',
+  );
+  log.debug('Resolved Convex content analytics item', {
+    userId: userId || 'signed_out', action: 'fetch_content_analytics_item', analyticsId: id,
   });
+  return {
+    data: record ? ({ ...record, id: record._id } as unknown as ContentAnalytics) : null,
+    isLoading: Boolean(userId) && record === undefined,
+    error: null as Error | null,
+  };
 }
-

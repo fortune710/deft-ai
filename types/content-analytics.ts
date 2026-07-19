@@ -23,11 +23,6 @@ export type ProcessingStep =
   | 'extract_thumbnail'
   | 'completed';
 
-export const SupabaseStoragePaths = {
-  Video: 'tmp_videos',
-  Thumbnails: 'thumbnails',
-} as const;
-
 export interface VideoMetrics {
   views: number;
   likes: number;
@@ -109,6 +104,7 @@ export interface ContentAnalytics {
   thumbnail_url: string | null;
   video_file_path: string | null;
   audio_file_path: string | null;
+  model_file_reference?: string | null;
   processing_status: ProcessingStatus;
   processing_error: string | null;
   created_at: string;

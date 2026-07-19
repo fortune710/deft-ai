@@ -1,7 +1,15 @@
-import { extractAudioFromVideo } from "@/lib/services/video-processor";
+import { logger } from '@/lib/logger.server';
+
+const log = logger.child({ module: 'app/api/test-audio/route' });
 
 export async function GET() {
-
-    const audioResult = await extractAudioFromVideo("f7017200-e556-4e59-9a8f-f0fb16903dea");
-    return Response.json(audioResult);
+  log.warn('Rejected obsolete direct audio extraction test', {
+    userId: 'unknown',
+    action: 'test_audio_extraction',
+    statusCode: 410,
+  });
+  return Response.json(
+    { error: 'Direct extraction is disabled; use the authenticated content analysis pipeline.' },
+    { status: 410 },
+  );
 }

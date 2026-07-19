@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo } from 'react';
 import type { ContentAnalytics } from '@/types/content-analytics';
 import { useContentAnalyticsItem } from '@/hooks/use-content-analytics-item';
-import { supabase } from '@/lib/supabase/client';
-import { PLATFORM_COLORS, SUPABASE_STORAGE_BUCKETS } from '@/lib/utils';
+import { PLATFORM_COLORS } from '@/lib/utils';
+import { useFileUrl } from '@/hooks/use-file-url';
+import { useAuth } from '@/hooks/use-clerk-auth';
+import { logger } from '@/lib/logger';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 import { Badge } from '@/components/ui/badge';
@@ -24,6 +25,7 @@ import {
 } from '@/components/ui/breadcrumb';
 import { AnalysisPanel } from '@/components/content-analytics/analysis-panel';
 
+const log = logger.child({ module: 'app/content-analytics/[id]/page' });
 
 
 
@@ -31,18 +33,18 @@ export default function ContentAnalyticsItemPage() {
   const params = useParams();
   const id = params.id as string;
   const { data: item, isLoading, error } = useContentAnalyticsItem(id);
+  const storedVideoUrl = useFileUrl(item?.video_file_path);
+  const { userId } = useAuth();
+
+  log.debug('Rendering content analytics item', {
+    userId: userId || 'signed_out',
+    action: 'render_content_analytics_item',
+    analyticsId: id,
+  });
 
   const platformColor = PLATFORM_COLORS[item?.platform!] || PLATFORM_COLORS.youtube;
 
-  const videoSrc = useMemo(() => {
-    if (!item) return null;
-    if (item.video_url) return item.video_url;
-    if (item.video_file_path) {
-      const { data } = supabase.storage.from(SUPABASE_STORAGE_BUCKETS.VIDEOS).getPublicUrl(item.video_file_path);
-      return data.publicUrl || null;
-    }
-    return null;
-  }, [item]);
+  const videoSrc = item?.video_url || storedVideoUrl;
 
   return (
     <AppLayout>
@@ -120,4 +122,3 @@ export default function ContentAnalyticsItemPage() {
     </AppLayout>
   );
 }
-

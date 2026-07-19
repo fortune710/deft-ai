@@ -1,22 +1,32 @@
 'use client';
 
-import { Plus, Sparkles } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { logger } from '@/lib/logger';
+import { useAuth } from '@/hooks/use-clerk-auth';
+
+const log = logger.child({ module: 'components/content-engine/generate-plan-button' });
 
 interface GeneratePlanButtonProps {
   onClick: () => void;
 }
 
 export function GeneratePlanButton({ onClick }: GeneratePlanButtonProps) {
+  const { userId } = useAuth();
+
+  log.debug('Rendering generate ideas button', {
+    userId: userId || 'signed_out',
+    action: 'render_generate_ideas_button',
+  });
+
   return (
     <>
       {/* Desktop Button - Hidden on mobile */}
       <Button
         onClick={onClick}
         size="lg"
-        className="hidden md:flex md:h-10 md:px-5 md:rounded-lg"
+        className="hidden border border-primary/70 bg-gradient-to-b from-primary/80 to-primary font-semibold shadow-[0_2px_6px_hsl(var(--primary)/0.12)] transition-[background-image,box-shadow,transform] hover:from-primary/90 hover:to-primary/90 hover:shadow-[0_3px_8px_hsl(var(--primary)/0.16)] active:translate-y-px motion-reduce:transform-none md:flex md:h-11 md:rounded-xl md:px-6"
       >
-        <Sparkles className="h-4 w-4 mr-2" />
         Generate Ideas
       </Button>
 
@@ -31,4 +41,3 @@ export function GeneratePlanButton({ onClick }: GeneratePlanButtonProps) {
     </>
   );
 }
-

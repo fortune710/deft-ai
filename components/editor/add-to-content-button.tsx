@@ -21,8 +21,12 @@ import {
 } from '../ui/select';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
-import { createContentItem } from '@/lib/api/content-items';
 import { ContentEngineTracking } from '@/lib/posthog/track';
+import { useCreateContentItem } from '@/hooks/use-content-items';
+import { useAuth } from '@/hooks/use-clerk-auth';
+import { logger } from '@/lib/logger';
+
+const log = logger.child({ module: 'components/editor/add-to-content-button' });
 
 interface AddToContentButtonProps {
   sessionId: string;
@@ -31,6 +35,14 @@ interface AddToContentButtonProps {
 
 export function AddToContentButton({ sessionId, content }: AddToContentButtonProps) {
   const router = useRouter();
+  const createContentItem = useCreateContentItem();
+  const { userId } = useAuth();
+
+  log.debug('Rendering add-to-content button', {
+    userId: userId || 'signed_out',
+    action: 'render_add_to_content_button',
+    sessionId,
+  });
 
   const [showDialog, setShowDialog] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState(content.platform || 'youtube');
@@ -52,7 +64,7 @@ export function AddToContentButton({ sessionId, content }: AddToContentButtonPro
     setIsAdding(true);
 
     try {
-      const createdItem = await createContentItem({
+      const createdItem = await createContentItem.mutateAsync({
         title: selectedHook.text,
         description: content.fullScript.substring(0, 200),
         platform: selectedPlatform as any,
@@ -77,7 +89,12 @@ export function AddToContentButton({ sessionId, content }: AddToContentButtonPro
       setShowDialog(false);
       router.push('/content-engine');
     } catch (error) {
-      console.error('Error adding to content ideas:', error);
+      log.error('Failed to add script to content ideas', {
+        userId: userId || 'signed_out',
+        action: 'create_content_item',
+        error,
+        message: error instanceof Error ? error.message : String(error),
+      });
       toast.error('Failed to add to content ideas');
     } finally {
       setIsAdding(false);

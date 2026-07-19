@@ -1,12 +1,6 @@
 import { SpeechClient } from '@google-cloud/speech';
 import { AssemblyAI } from 'assemblyai';
-import { createClient } from '@supabase/supabase-js';
 import type { TranscriptionResult, TranscriptSegment } from '@/types/video-analytics';
-import { getAudioStoragePath, SUPABASE_STORAGE_BUCKETS } from '@/lib/utils';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 let assembly: AssemblyAI | null = null;
 
@@ -29,21 +23,12 @@ function initializeSpeechClient(): AssemblyAI {
   }
 }
 
-export async function transcribeAudioFile(videoId: string): Promise<TranscriptionResult> {
+export async function transcribeAudioFile(audioUrl: string): Promise<TranscriptionResult> {
   try {
     const client = initializeSpeechClient();
-    const audioStoragePath = getAudioStoragePath(videoId);
-
-    const { data: audio } = await supabase.storage
-      .from(SUPABASE_STORAGE_BUCKETS.VIDEOS)
-      .getPublicUrl(audioStoragePath);
-
-    if (!audio || !audio.publicUrl) {
-      return { success: false, error: `Failed to get audio URL` };
-    }
 
     const params = {
-      audio_url: audio.publicUrl,
+      audio_url: audioUrl,
       speech_models: ['universal'],
     };
 

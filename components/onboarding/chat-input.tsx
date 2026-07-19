@@ -10,10 +10,13 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
-import { Paperclip, Plus, Send, Wand } from "lucide-react";
+import { Paperclip, Plus, Send } from "lucide-react";
+import { useAuth } from "@/hooks/use-clerk-auth";
+import { logger } from "@/lib/logger";
 
 import { useRef, useState } from "react";
+
+const log = logger.child({ module: 'components/onboarding/chat-input' });
 
 interface OnboardingChatInputProps {
     value?: string;
@@ -22,14 +25,19 @@ interface OnboardingChatInputProps {
 }
 
 export default function OnboardingChatInput({ value, onChange, onSubmit }: OnboardingChatInputProps = {}) {
+    const { userId } = useAuth();
     const [internalInput, setInternalInput] = useState("");
     const input = value !== undefined ? value : internalInput;
     const setInput = onChange || setInternalInput;
 
-    const [autoMode, setAutoMode] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleSubmit = (e?: React.FormEvent) => {
+        log.debug('Submitting onboarding niche prompt', {
+            userId: userId || 'signed_out',
+            action: 'submit_onboarding_niche_prompt',
+            hasInput: Boolean(input.trim()),
+        });
         if (e) e.preventDefault();
         if (input.trim()) {
             if (onSubmit) onSubmit();
@@ -38,13 +46,19 @@ export default function OnboardingChatInput({ value, onChange, onSubmit }: Onboa
 
     return (
         <div className="w-full">
-            <div className="bg-background border border-border rounded-2xl overflow-hidden">
+            <div className="overflow-hidden rounded-3xl border border-border/70 bg-background/85 shadow-[0_18px_60px_-36px_hsl(var(--foreground)/0.45)] transition-[border-color,box-shadow] duration-200 focus-within:border-primary/70 focus-within:ring-3 focus-within:ring-ring/20">
                 <input
                     ref={fileInputRef}
                     type="file"
                     multiple
                     className="sr-only"
-                    onChange={(e) => { }}
+                    onChange={(event) => {
+                        log.info('Selected onboarding context files', {
+                            userId: userId || 'signed_out',
+                            action: 'select_onboarding_context_files',
+                            fileCount: event.target.files?.length || 0,
+                        });
+                    }}
                 />
 
                 <div className="px-5 pt-5 pb-3 grow">
@@ -71,6 +85,7 @@ export default function OnboardingChatInput({ value, onChange, onSubmit }: Onboa
                                 <Button
                                     variant="ghost"
                                     size="icon"
+                                    aria-label="Add context"
                                     className="h-10 w-10 p-0 rounded-full border border-border hover:bg-muted/50 transition-colors"
                                 >
                                     <Plus className="h-5 w-5 text-muted-foreground" />
@@ -136,7 +151,8 @@ export default function OnboardingChatInput({ value, onChange, onSubmit }: Onboa
                         <Button
                             type="submit"
                             disabled={!input.trim()}
-                            className="w-10 h-10 p-0 rounded-full bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                            aria-label="Submit niche idea"
+                            className="h-10 w-10 rounded-full bg-primary p-0 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
                             onClick={handleSubmit}
                         >
                             <Send className="h-5 w-5 text-primary-foreground" />

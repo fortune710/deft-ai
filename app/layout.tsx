@@ -9,7 +9,11 @@ import { Toaster as SonnerToaster } from '@/components/ui/sonner';
 import { PHProvider, PostHogPageView } from '@/lib/posthog/provider';
 import { cn } from '@/lib/utils';
 import { alanSans, lexendDeca, inter } from '@/lib/fonts';
+import { ConvexClientProvider } from '@/components/convex-client-provider';
+import { logger } from '@/lib/logger.server';
+import { ClerkProvider } from '@clerk/nextjs';
 
+const log = logger.child({ module: 'app/layout' });
 
 export const metadata: Metadata = {
   title: 'Deft - The AI Operator for Modern Creators',
@@ -36,27 +40,36 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  log.debug('Rendering root layout', {
+    userId: 'not_available',
+    action: 'render_root_layout',
+  });
+
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.variable} ${alanSans.variable} ${lexendDeca.variable}`}>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="dark"
-          enableSystem={false}
-          disableTransitionOnChange
-        >
-          <PHProvider>
-            <QueryProvider>
-              <Suspense fallback={null}>
-                <PostHogPageView />
-              </Suspense>
-              {children}
-              <Toaster />
-              <SonnerToaster position="top-right" />
-            </QueryProvider>
-          </PHProvider>
-        </ThemeProvider>
-      </body>
-    </html>
+    <ClerkProvider signInUrl="/login" signUpUrl="/sign-up">
+      <html lang="en" suppressHydrationWarning>
+        <body className={`${inter.variable} ${alanSans.variable} ${lexendDeca.variable}`}>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="dark"
+            enableSystem={false}
+            disableTransitionOnChange
+          >
+            <PHProvider>
+              <ConvexClientProvider>
+                <QueryProvider>
+                  <Suspense fallback={null}>
+                    <PostHogPageView />
+                  </Suspense>
+                  {children}
+                  <Toaster />
+                  <SonnerToaster position="top-right" />
+                </QueryProvider>
+              </ConvexClientProvider>
+            </PHProvider>
+          </ThemeProvider>
+        </body>
+      </html>
+    </ClerkProvider>
   );
 }

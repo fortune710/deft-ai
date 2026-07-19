@@ -18,10 +18,13 @@ import {
   FieldLabel,
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { supabase } from '@/lib/supabase/client';
 import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { trackEvent, identifyUser } from '@/lib/posthog/track';
+import { usePasswordSignUp } from '@/hooks/use-clerk-auth';
+import { logger } from '@/lib/logger';
+
+const log = logger.child({ module: 'components/signup-form' });
 
 export function SignupForm({
   className,
@@ -33,6 +36,15 @@ export function SignupForm({
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
+  const [requiresVerification, setRequiresVerification] = useState(false);
+  const { isLoaded, signUpWithPassword, verifyEmailCode } = usePasswordSignUp();
+
+  log.debug('Rendering custom sign-up form', {
+    userId: 'signed_out',
+    action: 'render_sign_up_form',
+    requiresVerification,
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,30 +64,50 @@ export function SignupForm({
     }
 
     try {
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-      });
-
-      if (signUpError) throw signUpError;
-
-      if (data.user && data.session) {
-        document.cookie = `sb-access-token=${data.session.access_token}; path=/; max-age=3600; SameSite=Lax`;
-        document.cookie = `sb-refresh-token=${data.session.refresh_token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
-
-        // Track sign-up event and identify user in PostHog
-        identifyUser(data.user.id, {
-          email: data.user.email,
-        });
-        trackEvent('user_signed_up', {
-          userId: data.user.id,
-          email: data.user.email,
-        });
-
-        router.push('/onboarding');
+      const result = await signUpWithPassword(email, password);
+      if (result.requiresVerification) {
+        setRequiresVerification(true);
+        return;
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to create account');
+
+      const userId = result.userId || email;
+      identifyUser(userId, { email });
+      trackEvent('user_signed_up', { userId, email });
+      router.push('/onboarding');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to create account';
+      log.error('Clerk password sign-up failed', {
+        userId: 'signed_out',
+        action: 'password_sign_up',
+        error: err,
+        message,
+      });
+      setError(message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleVerification = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError('');
+
+    try {
+      const result = await verifyEmailCode(verificationCode);
+      const userId = result.userId || email;
+      identifyUser(userId, { email });
+      trackEvent('user_signed_up', { userId, email });
+      router.push('/onboarding');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to verify email';
+      log.error('Clerk email verification failed', {
+        userId: 'signed_out',
+        action: 'verify_email_code',
+        error: err,
+        message,
+      });
+      setError(message);
     } finally {
       setIsLoading(false);
     }
@@ -91,8 +123,25 @@ export function SignupForm({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={requiresVerification ? handleVerification : handleSubmit}>
             <FieldGroup>
+              {requiresVerification ? (
+                <Field>
+                  <FieldLabel htmlFor="verification-code">Verification code</FieldLabel>
+                  <Input
+                    id="verification-code"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    placeholder="Enter the code sent to your email"
+                    value={verificationCode}
+                    onChange={(e) => setVerificationCode(e.target.value)}
+                    required
+                    disabled={isLoading}
+                  />
+                  <FieldDescription>Check {email} for your verification code.</FieldDescription>
+                </Field>
+              ) : (
+                <>
               <Field>
                 <FieldLabel htmlFor="email">Email</FieldLabel>
                 <Input
@@ -132,18 +181,20 @@ export function SignupForm({
                   disabled={isLoading}
                 />
               </Field>
+                </>
+              )}
               {error && (
                 <div className="text-red-500 text-sm text-center">{error}</div>
               )}
               <Field>
-                <Button type="submit" disabled={isLoading} className="w-full">
+                <Button type="submit" disabled={isLoading || !isLoaded} className="w-full">
                   {isLoading ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                       Creating account...
                     </>
                   ) : (
-                    'Create Account'
+                    requiresVerification ? 'Verify Email' : 'Create Account'
                   )}
                 </Button>
                 <FieldDescription className="text-center">

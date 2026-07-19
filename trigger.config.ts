@@ -1,9 +1,18 @@
 import { defineConfig } from "@trigger.dev/sdk/v3";
+import { additionalFiles } from "@trigger.dev/build/extensions/core";
 
 export default defineConfig({
   project: "proj_jufzzmehebieoudurasg",
   runtime: "node",
   logLevel: "log",
+  legacyDevProcessCwdBehaviour: false,
+  build: {
+    extensions: [
+      additionalFiles({
+        files: ["node_modules/pdf-parse/dist/worker/pdf.worker.mjs"],
+      }),
+    ],
+  },
   // The max compute seconds a task is allowed to run. If the task run exceeds this duration, it will be stopped.
   // You can override this on an individual task.
   // See https://trigger.dev/docs/runs/max-duration

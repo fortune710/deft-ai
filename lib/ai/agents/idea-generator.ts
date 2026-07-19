@@ -4,7 +4,7 @@ import { getModel } from '@/lib/ai/models/get-model';
 import { buildIdeaGenerationPrompt } from '@/lib/ai/prompts/idea-generation-advanced';
 import { tavilySearch } from '@/lib/integrations/tavily';
 import { z } from "zod";
-import { logger } from '@/lib/logger';
+import { logger } from '@/lib/logger.server';
 import { getModelForPlatform } from '@/lib/ai/utils/content-generator-utils';
 import { getSocialContentExpertPersona, getPlatformQuickReference } from '@/lib/ai/skills/social-content';
 

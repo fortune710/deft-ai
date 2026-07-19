@@ -1,107 +1,74 @@
-import pino, { Logger as PinoLogger } from "pino";
-import { logger as triggerLogger } from "@trigger.dev/sdk/v3";
+import type { AppLogger } from './logger.types';
 
-const isProduction = process.env.NODE_ENV === "production";
+export type { AppLogger } from './logger.types';
 
-/**
- * Configure Pino for standard environments (Next.js server/API)
- */
-const rootPino = isProduction
-  ? pino({
-    level: "info",
-    base: { env: process.env.NODE_ENV },
-    // Minimal properties for structured logging
-    timestamp: pino.stdTimeFunctions.isoTime,
-  })
-  : pino({
-    transport: {
-      target: "pino-pretty",
-      options: {
-        colorize: true,
-        ignore: 'pid,hostname',
-      },
-    },
-    level: "debug",
-  });
+type ClientLogLevel = 'debug' | 'info' | 'warn' | 'error';
+const recentDebugLogs = new Map<string, number>();
 
-export interface AppLogger {
-  info: (msg: string, data?: any, thirdPartyRuntime?: boolean) => void;
-  warn: (msg: string, data?: any, thirdPartyRuntime?: boolean) => void;
-  error: (msg: string, data?: any, thirdPartyRuntime?: boolean) => void;
-  debug: (msg: string, data?: any, thirdPartyRuntime?: boolean) => void;
-  phase: (phase: string, message: string, thirdPartyRuntime?: boolean) => void;
-  child: (bindings: any) => AppLogger;
-}
+const normalizeClientData = (data: unknown): Record<string, unknown> => {
+  if (data instanceof Error) {
+    return { error: { name: data.name, message: data.message, stack: data.stack } };
+  }
+  if (data && typeof data === 'object') {
+    return Object.fromEntries(
+      Object.entries(data).map(([key, value]) => [
+        key,
+        value instanceof Error
+          ? { name: value.name, message: value.message, stack: value.stack }
+          : value,
+      ]),
+    );
+  }
+  return data === undefined ? {} : { value: data };
+};
 
-/**
- * Factory to create a logger instance that handles both Pino and Trigger.dev
- */
-const createLoggerInstance = (pino: PinoLogger, bindings: any = {}): AppLogger => {
-  const formatData = (data: any) => {
-    if (data instanceof Error) {
-      return { err: data };
-    }
-    if (data && typeof data === 'object' && 'error' in data && data.error instanceof Error) {
-      return { ...data, err: data.error };
-    }
-    return data;
+const sendClientLog = (
+  level: ClientLogLevel,
+  message: string,
+  attributes: Record<string, unknown>,
+) => {
+  if (typeof window === 'undefined') return;
+
+  const payload = { level, message, ...attributes };
+  if (level === 'debug') {
+    const key = JSON.stringify(payload);
+    const now = Date.now();
+    const lastSentAt = recentDebugLogs.get(key) ?? 0;
+    if (now - lastSentAt < 2_000) return;
+    recentDebugLogs.set(key, now);
+  }
+
+  void fetch('/api/log/client', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    keepalive: true,
+  }).catch(() => undefined);
+};
+
+const createClientLogger = (bindings: Record<string, unknown> = {}): AppLogger => {
+  const write = (level: ClientLogLevel, message: string, data: unknown, action: string) => {
+    sendClientLog(level, message, {
+      userId: 'unknown',
+      action,
+      ...bindings,
+      ...normalizeClientData(data),
+    });
   };
 
   return {
-    info: (msg, data, thirdPartyRuntime = false) => {
-      const formattedData = formatData(data);
-      const mergedData = { ...bindings, ...formattedData };
-      if (thirdPartyRuntime) {
-        triggerLogger.info(msg, mergedData);
-      } else {
-        pino.info(mergedData, msg);
-      }
-    },
-    warn: (msg, data, thirdPartyRuntime = false) => {
-      const formattedData = formatData(data);
-      const mergedData = { ...bindings, ...formattedData };
-      if (thirdPartyRuntime) {
-        triggerLogger.warn(msg, mergedData);
-      } else {
-        pino.warn(mergedData, msg);
-      }
-    },
-    error: (msg, data, thirdPartyRuntime = false) => {
-      const formattedData = formatData(data);
-      const mergedData = { ...bindings, ...formattedData };
-      if (thirdPartyRuntime) {
-        triggerLogger.error(msg, mergedData);
-      } else {
-        pino.error(mergedData, msg);
-      }
-    },
-    debug: (msg, data, thirdPartyRuntime = false) => {
-      const formattedData = formatData(data);
-      const mergedData = { ...bindings, ...formattedData };
-      if (thirdPartyRuntime) {
-        if (typeof (triggerLogger as any).debug === 'function') {
-          (triggerLogger as any).debug(msg, mergedData);
-        } else {
-          triggerLogger.log(msg, mergedData);
-        }
-      } else {
-        pino.debug(mergedData, msg);
-      }
-    },
-    phase: (phase, message, thirdPartyRuntime = false) => {
-      const formatted = `>>> [${phase.toUpperCase()}] ${message}`;
-      const mergedData = { ...bindings, phase };
-      if (thirdPartyRuntime) {
-        triggerLogger.log(formatted, mergedData);
-      } else {
-        pino.info(mergedData, formatted);
-      }
-    },
-    child: (newBindings) => createLoggerInstance(pino.child(newBindings), { ...bindings, ...newBindings }),
+    info: (message, data) => write('info', message, data, 'log_info'),
+    warn: (message, data) => write('warn', message, data, 'log_warning'),
+    error: (message, data) => write('error', message, data, 'log_error'),
+    debug: (message, data) => write('debug', message, data, 'log_debug'),
+    phase: (phase, message) => write(
+      'info',
+      `>>> [${phase.toUpperCase()}] ${message}`,
+      { phase },
+      `phase_${phase}`,
+    ),
+    child: (newBindings) => createClientLogger({ ...bindings, ...newBindings }),
   };
 };
 
-/**
- * Unified logger utility with support for structured logging, child loggers, and Trigger.dev.
- */
-export const logger = createLoggerInstance(rootPino);
+export const logger = createClientLogger();
