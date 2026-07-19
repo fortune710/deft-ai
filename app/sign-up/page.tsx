@@ -1,22 +1,24 @@
-import Image from "next/image"
-import { SignupForm } from "@/components/signup-form"
+import Image from 'next/image';
+import { SignupForm } from '@/components/signup-form';
+import { logger } from '@/lib/logger.server';
+
+const log = logger.child({ module: 'app/sign-up/page' });
 
 export default function SignupPage() {
+  log.debug('Rendering custom sign-up page', {
+    userId: 'signed_out',
+    action: 'render_sign_up',
+  });
+
   return (
     <div className="bg-muted flex h-screen flex-col items-center justify-center gap-6 p-6 md:p-10">
       <div className="flex w-full max-w-sm flex-col gap-6">
         <a href="#" className="flex items-center gap-2 self-center font-medium">
-          <Image
-            src="/deft-logo.png"
-            alt="Deft"
-            width={24}
-            height={24}
-            className="rounded-md"
-          />
+          <Image src="/deft-logo.png" alt="Deft" width={24} height={24} className="rounded-md" />
           Deft
         </a>
         <SignupForm />
       </div>
     </div>
-  )
+  );
 }

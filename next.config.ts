@@ -6,9 +6,7 @@ const nextConfig: NextConfig = {
   },
   images: { unoptimized: true },
   transpilePackages: ['framer-motion'],
-  experimental: {
-    serverComponentsExternalPackages: ['pino', 'pino-pretty'],
-  },
+  serverExternalPackages: ['@trigger.dev/sdk'],
 }
 
 export default nextConfig;

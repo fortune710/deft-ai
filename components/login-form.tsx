@@ -18,10 +18,13 @@ import {
   FieldLabel,
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { supabase } from '@/lib/supabase/client';
 import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { identifyUser } from '@/lib/posthog/track';
+import { usePasswordSignIn } from '@/hooks/use-clerk-auth';
+import { logger } from '@/lib/logger';
+
+const log = logger.child({ module: 'components/login-form' });
 
 export function LoginForm({
   className,
@@ -32,6 +35,12 @@ export function LoginForm({
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const { isLoaded, signInWithPassword } = usePasswordSignIn();
+
+  log.debug('Rendering custom login form', {
+    userId: 'signed_out',
+    action: 'render_login_form',
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,36 +48,18 @@ export function LoginForm({
     setError('');
 
     try {
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      const result = await signInWithPassword(email, password);
+      identifyUser(result.userId || email, { email });
+      router.push('/content-engine');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to sign in';
+      log.error('Clerk password sign-in failed', {
+        userId: 'signed_out',
+        action: 'password_sign_in',
+        error: err,
+        message,
       });
-
-      if (signInError) throw signInError;
-
-      if (data.user && data.session) {
-        document.cookie = `sb-access-token=${data.session.access_token}; path=/; max-age=3600; SameSite=Lax`;
-        document.cookie = `sb-refresh-token=${data.session.refresh_token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
-
-        // Identify user in PostHog
-        identifyUser(data.user.id, {
-          email: data.user.email,
-        });
-
-        const { data: profile } = await supabase
-          .from('user_content_profile')
-          .select('completed_at')
-          .eq('user_id', data.user.id)
-          .maybeSingle();
-
-        if (profile && profile.completed_at) {
-          router.push('/content-engine');
-        } else {
-          router.push('/onboarding');
-        }
-      }
-    } catch (err: any) {
-      setError(err.message || 'Failed to sign in');
+      setError(message);
     } finally {
       setIsLoading(false);
     }
@@ -115,7 +106,7 @@ export function LoginForm({
                 <div className="text-red-500 text-sm text-center">{error}</div>
               )}
               <Field>
-                <Button type="submit" disabled={isLoading} className="w-full">
+                <Button type="submit" disabled={isLoading || !isLoaded} className="w-full">
                   {isLoading ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
