@@ -6,11 +6,13 @@ import { useSessionMessages } from '@/hooks/use-script-chats';
 import { MdxScriptEditor, MdxScriptEditorRef } from '@/components/editor/mdx-script-editor';
 import { ChatPanel } from '@/components/editor/chat-panel';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Loader2, Sparkles } from 'lucide-react';
+import { ArrowLeft, Loader2, PanelRight } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { contentToMarkdown } from '@/lib/utils/script-markdown';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
+import { motion, useReducedMotion } from 'framer-motion';
+import type { ImperativePanelHandle } from 'react-resizable-panels';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -19,19 +21,143 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb';
+import { logger } from '@/lib/logger';
+import { useAuth } from '@/hooks/use-clerk-auth';
+
+const log = logger.child({ file: 'app/script-creator/edit-content/[itemId]/page.tsx' });
 
 export default function EditContentPage() {
   const params = useParams();
   const router = useRouter();
   const itemId = params.itemId as string;
+  const { userId } = useAuth();
 
   const { data: contentItem, isLoading: itemLoading } = useContentItem(itemId);
   const { data: messages } = useSessionMessages(itemId);
   const updateItemContent = useUpdateItemContent();
   const editorRef = useRef<MdxScriptEditorRef>(null);
+  const chatPanelRef = useRef<ImperativePanelHandle>(null);
+  const collapseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const shouldReduceMotion = useReducedMotion();
 
   const [initialMarkdown, setInitialMarkdown] = useState<string | null>(null);
   const [showChat, setShowChat] = useState(true);
+
+  log.debug('Rendering content editor', {
+    action: 'render_content_editor',
+    userId: userId || 'signed_out',
+    itemId,
+    showChat,
+  });
+
+  const setChatPanelVisibility = (nextState: boolean, source: 'toggle' | 'chat_panel') => {
+    log.info('Updating assistant panel visibility', {
+      action: 'update_assistant_panel_visibility',
+      userId: userId || 'signed_out',
+      itemId,
+      nextState,
+      source,
+    });
+
+    if (collapseTimeoutRef.current) {
+      clearTimeout(collapseTimeoutRef.current);
+      collapseTimeoutRef.current = null;
+      log.debug('Cancelled pending assistant panel collapse', {
+        action: 'cancel_assistant_panel_collapse',
+        userId: userId || 'signed_out',
+        itemId,
+        source,
+      });
+    }
+
+    if (nextState) {
+      try {
+        chatPanelRef.current?.expand();
+        log.debug('Expanded assistant panel layout', {
+          action: 'expand_assistant_panel_layout',
+          userId: userId || 'signed_out',
+          itemId,
+          source,
+        });
+      } catch (error) {
+        log.error('Failed to expand assistant panel layout', {
+          action: 'expand_assistant_panel_layout',
+          userId: userId || 'signed_out',
+          itemId,
+          source,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
+      setShowChat(true);
+      return;
+    }
+
+    setShowChat(false);
+    const collapseDelay = shouldReduceMotion ? 200 : 240;
+    collapseTimeoutRef.current = setTimeout(() => {
+      log.debug('Completing assistant panel collapse', {
+        action: 'complete_assistant_panel_collapse',
+        userId: userId || 'signed_out',
+        itemId,
+        source,
+        collapseDelay,
+      });
+
+      try {
+        chatPanelRef.current?.collapse();
+      } catch (error) {
+        log.error('Failed to collapse assistant panel layout', {
+          action: 'collapse_assistant_panel_layout',
+          userId: userId || 'signed_out',
+          itemId,
+          source,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      } finally {
+        collapseTimeoutRef.current = null;
+      }
+    }, collapseDelay);
+  };
+
+  const handleChatToggle = () => {
+    log.info('Toggling assistant panel', {
+      action: 'toggle_assistant_panel',
+      userId: userId || 'signed_out',
+      itemId,
+      nextState: !showChat,
+    });
+    setChatPanelVisibility(!showChat, 'toggle');
+  };
+
+  const handleChatClose = () => {
+    log.info('Closing assistant panel from chat controls', {
+      action: 'close_assistant_panel_from_chat',
+      userId: userId || 'signed_out',
+      itemId,
+    });
+    setChatPanelVisibility(false, 'chat_panel');
+  };
+
+  useEffect(() => {
+    log.debug('Registered assistant panel collapse cleanup', {
+      action: 'register_assistant_panel_collapse_cleanup',
+      userId: userId || 'signed_out',
+      itemId,
+    });
+
+    return () => {
+      log.debug('Cleaning up assistant panel collapse timer', {
+        action: 'cleanup_assistant_panel_collapse_timer',
+        userId: userId || 'signed_out',
+        itemId,
+      });
+      if (collapseTimeoutRef.current) {
+        clearTimeout(collapseTimeoutRef.current);
+        collapseTimeoutRef.current = null;
+      }
+    };
+  }, [itemId, userId]);
 
   useEffect(() => {
     if (contentItem && initialMarkdown === null) {
@@ -96,12 +222,16 @@ export default function EditContentPage() {
           </Breadcrumb>
         </div>
         <div className="flex items-center gap-2">
-          {!showChat && (
-            <Button variant="outline" size="sm" onClick={() => setShowChat(true)} className="gap-2 rounded-full px-4 text-xs h-8">
-              <Sparkles className="h-3.5 w-3.5" />
-              AI Assistant
-            </Button>
-          )}
+          <Button
+            variant={showChat ? 'secondary' : 'outline'}
+            size="icon"
+            onClick={handleChatToggle}
+            aria-label={showChat ? 'Close assistant panel' : 'Open assistant panel'}
+            aria-pressed={showChat}
+            className="h-8 w-8 rounded-lg"
+          >
+            <PanelRight className="h-4 w-4" />
+          </Button>
         </div>
       </header>
 
@@ -116,22 +246,45 @@ export default function EditContentPage() {
             />
           </ResizablePanel>
 
-          {showChat && (
-            <>
-              <ResizableHandle className="w-1.5 bg-transparent hover:bg-primary/20 hover:w-2 transition-all group relative">
-                <div className="absolute inset-y-1/2 -left-0.5 right-0.5 h-12 bg-border group-hover:bg-primary/50 transition-colors rounded-full" />
-              </ResizableHandle>
-              <ResizablePanel defaultSize={30} minSize={25} maxSize={40} className="border-l bg-accent/30 shadow-inner flex flex-col">
-                <ChatPanel
-                  sessionId={itemId}
-                  messages={messages || []}
-                  editorContent={editorRef.current?.getMarkdown() || initialMarkdown}
-                  onClose={() => setShowChat(false)}
-                  onContentUpdate={handleAIContentUpdate as any}
-                />
-              </ResizablePanel>
-            </>
-          )}
+          <ResizableHandle
+            disabled={!showChat}
+            className={`w-1.5 shrink-0 bg-transparent hover:bg-primary/20 transition-[opacity,background-color] duration-[160ms] [transition-timing-function:cubic-bezier(0.23,1,0.32,1)] ${
+              showChat ? 'opacity-100' : 'pointer-events-none opacity-0'
+            }`}
+          />
+          <ResizablePanel
+            ref={chatPanelRef}
+            collapsible
+            collapsedSize={0}
+            defaultSize={30}
+            minSize={25}
+            maxSize={40}
+            className="overflow-hidden"
+          >
+            <motion.div
+              initial={false}
+              animate={{
+                opacity: showChat ? 1 : 0,
+                transform: showChat || shouldReduceMotion ? 'translateX(0%)' : 'translateX(100%)',
+              }}
+              transition={{
+                duration: shouldReduceMotion ? 0.2 : 0.24,
+                ease: shouldReduceMotion ? [0.23, 1, 0.32, 1] : [0.32, 0.72, 0, 1],
+              }}
+              aria-hidden={!showChat}
+              {...(!showChat ? { inert: '' } : {})}
+              className="flex h-full flex-col border-l bg-accent/30 shadow-inner"
+            >
+              <ChatPanel
+                sessionId={itemId}
+                messages={messages || []}
+                editorContent={editorRef.current?.getMarkdown() || initialMarkdown}
+                onClose={handleChatClose}
+                onContentUpdate={handleAIContentUpdate as any}
+                showHeader={false}
+              />
+            </motion.div>
+          </ResizablePanel>
         </ResizablePanelGroup>
       </div>
     </div>

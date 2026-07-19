@@ -3,7 +3,7 @@ import { getModel } from './models/get-model';
 import { AI_MODELS, AIModelName, getModelConfig } from '@/types/ai-models';
 import type { UserContentProfile } from '@/types/niche-mapping';
 import type { InstantExecutionOutput, EditProposal } from '@/types/script-chat';
-import { logger } from '@/lib/logger';
+import { logger } from '@/lib/logger.server';
 
 /**
  * Zod schemas for structured outputs
@@ -90,9 +90,17 @@ export async function generateEditProposal(
   editRequest: string,
   currentContent: any,
   userProfile: UserContentProfile | null,
-  modelName: AIModelName = AI_MODELS.GOOGLE_PRO.model
+  modelName: AIModelName = AI_MODELS.GOOGLE_PRO.model,
+  userId = 'unknown',
+  sessionId = 'unknown',
 ): Promise<{ content: string; proposedChanges: EditProposal[] }> {
-  const log = logger.child({ module: 'InstantExecutionGenerator', operation: 'generateEditProposal', model: modelName });
+  const log = logger.child({
+    module: 'InstantExecutionGenerator',
+    operation: 'generateEditProposal',
+    model: modelName,
+    userId,
+    sessionId,
+  });
   const model = getModel(getModelConfig(modelName)).withStructuredOutput(EditProposalSchema);
 
   const contextContext = buildProfileContext(userProfile);
@@ -117,7 +125,13 @@ If the request is for a complete rewrite, provide the entire updated Markdown in
 `.trim();
 
   try {
-    log.info('Generating edit proposal');
+    log.info('Generating edit proposal', {
+      userId,
+      action: 'generate_edit_proposal',
+      sessionId,
+      editRequestLength: editRequest.length,
+      currentContentType: typeof currentContent,
+    });
     const result = await model.invoke([
       { role: 'system', content: 'You are an expert script editor.' },
       { role: 'user', content: fullPrompt }
@@ -125,7 +139,12 @@ If the request is for a complete rewrite, provide the entire updated Markdown in
 
     return result;
   } catch (error) {
-    log.error('Failed to generate edit proposal', error);
+    log.error('Failed to generate edit proposal', {
+      userId,
+      action: 'generate_edit_proposal',
+      sessionId,
+      error,
+    });
     throw new Error(`Failed to generate edit proposal: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
