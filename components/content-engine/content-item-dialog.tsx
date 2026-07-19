@@ -24,6 +24,10 @@ import {
 import { useUpdateContentItem } from '@/hooks/use-content-items';
 import { toast } from 'sonner';
 import type { ContentItem, Platform } from '@/types/content-engine';
+import { logger } from '@/lib/logger';
+import { useAuth } from '@/hooks/use-clerk-auth';
+
+const log = logger.child({ module: 'components/content-engine/content-item-dialog' });
 
 interface ContentItemDialogProps {
   item: ContentItem | null;
@@ -41,65 +45,116 @@ const platformLabels: Record<Platform, string> = {
 };
 
 export function ContentItemDialog({ item, open, onOpenChange }: ContentItemDialogProps) {
+  const { userId } = useAuth();
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
   const [editedTitle, setEditedTitle] = useState('');
   const [editedDescription, setEditedDescription] = useState('');
   const [scheduleOpen, setScheduleOpen] = useState(false);
 
   const updateItem = useUpdateContentItem();
+  const itemId = item?.id;
+  const itemTitle = item?.title || '';
+  const itemDescription = item?.description || '';
 
-  // Reset edit state when dialog closes or item changes
   useEffect(() => {
-    if (!open || !item) {
-      setEditedTitle('');
-      setEditedDescription('');
-      setCopiedSection(null);
-    }
-  }, [open, item]);
+    if (!open || !itemId) return;
+    setEditedTitle(itemTitle);
+    setEditedDescription(itemDescription);
+    setCopiedSection(null);
+  }, [open, itemId, itemTitle, itemDescription]);
 
-  const handleCopy = (text: string, section: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedSection(section);
-    setTimeout(() => setCopiedSection(null), 2000);
-    toast.success('Copied to clipboard');
+  const isDirty = Boolean(item) && (
+    editedTitle !== itemTitle || editedDescription !== itemDescription
+  );
+
+  log.debug('Rendering content item dialog', {
+    userId: userId || 'signed_out',
+    action: 'render_content_item_dialog',
+    itemId: item?.id || null,
+    isDirty,
+  });
+
+  const handleCopy = async (text: string, section: string) => {
+    if (!item || !text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedSection(section);
+      setTimeout(() => setCopiedSection(null), 2000);
+      log.info('Copied content item section', {
+        userId: userId || 'signed_out',
+        action: 'copy_content_item_section',
+        itemId: item.id,
+        section,
+      });
+      toast.success('Copied to clipboard');
+    } catch (error) {
+      log.error('Failed to copy content item section', {
+        userId: userId || 'signed_out',
+        action: 'copy_content_item_section',
+        itemId: item.id,
+        section,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      toast.error('Failed to copy to clipboard');
+    }
   };
 
   const handleSaveBasicInfo = () => {
-    if (!editedTitle && !editedDescription) return;
+    if (!item || !isDirty) return;
+    const title = editedTitle.trim();
+    if (!title) {
+      toast.error('Title cannot be empty');
+      return;
+    }
 
-    const updates: any = {};
-    if (editedTitle) updates.title = editedTitle;
-    if (editedDescription) updates.description = editedDescription;
+    log.info('Saving content item draft', {
+      userId: userId || 'signed_out',
+      action: 'save_content_item_draft',
+      itemId: item.id,
+    });
+    setEditedTitle(title);
 
     updateItem.mutate(
-      { itemId: item.id, updates },
+      { itemId: item.id, updates: { title, description: editedDescription } },
       {
         onSuccess: () => {
           toast.success('Content updated');
-          setEditedTitle('');
-          setEditedDescription('');
         },
-        onError: () => {
+        onError: (error) => {
+          log.error('Failed to save content item draft', {
+            userId: userId || 'signed_out',
+            action: 'save_content_item_draft',
+            itemId: item.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
           toast.error('Failed to update content');
         },
       }
     );
   };
 
-  const CopyButton = ({ section, text }: { section: string; text: string }) => (
-    <Button
+  const CopyButton = ({ section, text }: { section: string; text: string }) => {
+    log.debug('Rendering content copy control', {
+      userId: userId || 'signed_out',
+      action: 'render_content_copy_control',
+      itemId: item?.id || null,
+      section,
+    });
+    return <Button
       variant="ghost"
       size="sm"
       onClick={() => handleCopy(text, section)}
       className="ml-auto"
+      disabled={!text}
+      aria-label={`Copy ${section}`}
     >
       {copiedSection === section ? (
         <Check className="h-4 w-4 text-green-600" />
       ) : (
         <Copy className="h-4 w-4" />
       )}
-    </Button>
-  );
+    </Button>;
+  };
 
   return (
     <Dialog open={open && !!item} onOpenChange={onOpenChange}>
@@ -123,7 +178,7 @@ export function ContentItemDialog({ item, open, onOpenChange }: ContentItemDialo
             <div className="space-y-2">
               <Label>Title</Label>
               <Input
-                value={editedTitle || item.title}
+                value={editedTitle}
                 onChange={(e) => setEditedTitle(e.target.value)}
                 placeholder="Content title"
               />
@@ -132,7 +187,7 @@ export function ContentItemDialog({ item, open, onOpenChange }: ContentItemDialo
             <div className="space-y-2">
               <Label>Description</Label>
               <Textarea
-                value={editedDescription || item.description || ''}
+                value={editedDescription}
                 onChange={(e) => setEditedDescription(e.target.value)}
                 placeholder="Content description"
                 rows={2}
@@ -161,8 +216,23 @@ export function ContentItemDialog({ item, open, onOpenChange }: ContentItemDialo
                       updateItem.mutate(
                         { itemId: item.id, updates: { scheduled_date: format(date, 'yyyy-MM-dd') } },
                         {
-                          onSuccess: () => toast.success('Schedule updated'),
-                          onError: () => toast.error('Failed to update schedule'),
+                          onSuccess: () => {
+                            log.info('Updated content item schedule', {
+                              userId: userId || 'signed_out',
+                              action: 'update_content_item_schedule',
+                              itemId: item.id,
+                            });
+                            toast.success('Schedule updated');
+                          },
+                          onError: (error) => {
+                            log.error('Failed to update content item schedule', {
+                              userId: userId || 'signed_out',
+                              action: 'update_content_item_schedule',
+                              itemId: item.id,
+                              error: error instanceof Error ? error.message : String(error),
+                            });
+                            toast.error('Failed to update schedule');
+                          },
                         }
                       );
                       setScheduleOpen(false);
@@ -173,11 +243,14 @@ export function ContentItemDialog({ item, open, onOpenChange }: ContentItemDialo
               </Popover>
             </div>
 
-            {(editedTitle || editedDescription) && (
-              <Button onClick={handleSaveBasicInfo} disabled={updateItem.isPending}>
-                Save Changes
+            <div className="flex justify-end">
+              <Button
+                onClick={handleSaveBasicInfo}
+                disabled={!isDirty || !editedTitle.trim() || updateItem.isPending}
+              >
+                {updateItem.isPending ? 'Saving…' : 'Save Changes'}
               </Button>
-            )}
+            </div>
           </div>
 
           <Tabs defaultValue="hook" className="mt-6">

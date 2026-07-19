@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { format } from 'date-fns';
 import { MoreVertical, Trash2, Copy, Edit2, Calendar as CalendarIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -43,6 +43,10 @@ import { useUpdateContentItem } from '@/hooks/use-content-items';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { ContentItem, Platform } from '@/types/content-engine';
+import { logger } from '@/lib/logger';
+import { useAuth } from '@/hooks/use-clerk-auth';
+
+const log = logger.child({ module: 'components/content-engine/content-item-card' });
 
 interface ContentItemCardProps {
   item: ContentItem;
@@ -77,12 +81,19 @@ export function ContentItemCard({
   onDuplicate,
   isDragging = false,
 }: ContentItemCardProps) {
-  const router = useRouter();
+  const { userId } = useAuth();
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [newTitle, setNewTitle] = useState(item.title);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const updateItem = useUpdateContentItem();
+
+  log.debug('Rendering content item card', {
+    userId: userId || 'signed_out',
+    action: 'render_content_item_card',
+    itemId: item.id,
+    isDragging,
+  });
 
   // Sync title when item changes
   useEffect(() => {
@@ -93,20 +104,24 @@ export function ContentItemCard({
   const formattedDate = format(scheduledDate, 'MMM d');
   const daysUntil = Math.ceil((scheduledDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 
-  const handleCardClick = () => {
-    // Don't navigate if a dialog/popover is open
-    if (renameDialogOpen || deleteDialogOpen || scheduleOpen) return;
-    router.push(`/script-creator/edit-content/${item.id}`);
-  };
-
   const handleRenameSelect = (e: Event) => {
     // Radix DropdownMenu uses `onSelect` (Event), not React.MouseEvent.
     e.preventDefault();
+    log.info('Opening content item rename dialog', {
+      userId: userId || 'signed_out',
+      action: 'open_content_item_rename',
+      itemId: item.id,
+    });
     setNewTitle(item.title);
     setRenameDialogOpen(true);
   };
 
   const handleRename = async () => {
+    log.info('Renaming content item', {
+      userId: userId || 'signed_out',
+      action: 'rename_content_item',
+      itemId: item.id,
+    });
     if (!newTitle.trim()) {
       toast.error('Title cannot be empty');
       return;
@@ -125,24 +140,29 @@ export function ContentItemCard({
       toast.success('Content item renamed');
       setRenameDialogOpen(false);
     } catch (error) {
-      console.error('Error renaming item:', error);
+      log.error('Failed to rename content item', {
+        userId: userId || 'signed_out',
+        action: 'rename_content_item',
+        itemId: item.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
       toast.error('Failed to rename content item');
     }
   };
 
   return (
     <>
-      {/* Card surface — only navigates on direct click */}
       <div
-        onClick={handleCardClick}
-        className={`group bg-transparent rounded-xl border border-gray-100 dark:border-gray-800 p-4 shadow-none hover:border-gray-300 dark:hover:border-gray-600 transition-all cursor-pointer ${isDragging ? 'opacity-50' : ''
-          }`}
+        className={cn(
+          'group rounded-xl border border-border bg-card p-4 shadow-sm transition-[transform,opacity,box-shadow,border-color,background-color] duration-[160ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:border-primary/30 motion-reduce:transform-none',
+          isDragging && 'scale-[1.015] border-primary/40 bg-card opacity-95 shadow-xl motion-reduce:transform-none',
+        )}
       >
         <div className="flex items-start justify-between gap-2 mb-2">
           <Badge
             variant="outline"
             className={cn(
-              "px-2 py-0 h-5 text-[9px] font-black uppercase tracking-widest rounded-full border text-center flex items-center justify-center",
+              "flex h-5 items-center justify-center rounded-full border px-2 py-0 text-center text-[11px] font-semibold tracking-[0.02em]",
               platformColors[item.platform.toLowerCase() as Platform] || 'bg-gray-100 text-gray-700'
             )}
           >
@@ -153,7 +173,8 @@ export function ContentItemCard({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6 opacity-0 group-hover:opacity-100 z-10"
+              className="z-10 h-7 w-7 opacity-100"
+              aria-label={`More actions for ${item.title}`}
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -196,13 +217,18 @@ export function ContentItemCard({
           </DropdownMenu>
         </div>
 
-        <h4 className="font-medium text-sm mb-2 line-clamp-2">{item.title}</h4>
-
-        {item.description && (
-          <p className="text-xs text-gray-600 dark:text-gray-400 mb-2 line-clamp-2">
-            {item.description}
-          </p>
-        )}
+        <Link
+          href={`/script-creator/edit-content/${item.id}`}
+          className="mb-2 block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          aria-label={`Open ${item.title}`}
+        >
+          <h4 className="line-clamp-2 text-sm font-semibold leading-snug tracking-[-0.01em]">{item.title}</h4>
+          {item.description && (
+            <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
+              {item.description}
+            </p>
+          )}
+        </Link>
 
         <div className="flex items-center justify-between gap-2 text-xs text-gray-500 dark:text-gray-400">
           <Popover open={scheduleOpen} onOpenChange={setScheduleOpen}>
@@ -210,7 +236,8 @@ export function ContentItemCard({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-7 px-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+                className="h-7 rounded-md px-2 hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label={`Change schedule for ${item.title}`}
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -222,7 +249,7 @@ export function ContentItemCard({
                 <CalendarIcon className="h-3.5 w-3.5 mr-1 text-gray-400" />
                 <span>{formattedDate}</span>
                 {daysUntil >= 0 && (
-                  <span className="ml-1 text-[10px] text-gray-400">
+                  <span className="ml-1 text-[11px] text-muted-foreground">
                     {daysUntil === 0 ? 'Today' : `${daysUntil}d`}
                   </span>
                 )}
@@ -242,8 +269,23 @@ export function ContentItemCard({
                   updateItem.mutate(
                     { itemId: item.id, updates: { scheduled_date: format(date, 'yyyy-MM-dd') } },
                     {
-                      onSuccess: () => toast.success('Schedule updated'),
-                      onError: () => toast.error('Failed to update schedule'),
+                      onSuccess: () => {
+                        log.info('Updated content item schedule', {
+                          userId: userId || 'signed_out',
+                          action: 'update_content_item_schedule',
+                          itemId: item.id,
+                        });
+                        toast.success('Schedule updated');
+                      },
+                      onError: (error) => {
+                        log.error('Failed to update content item schedule', {
+                          userId: userId || 'signed_out',
+                          action: 'update_content_item_schedule',
+                          itemId: item.id,
+                          error: error instanceof Error ? error.message : String(error),
+                        });
+                        toast.error('Failed to update schedule');
+                      },
                     }
                   );
                   setScheduleOpen(false);
