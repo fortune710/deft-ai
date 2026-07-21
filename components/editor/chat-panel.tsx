@@ -169,7 +169,7 @@ export function ChatPanel({
         </div>
       )}
 
-      <div className="flex-1 overflow-auto px-4 py-4 space-y-4 custom-scrollbar pb-32">
+      <div className="flex-1 overflow-auto px-4 py-4 space-y-4 custom-scrollbar pb-4">
         {messages.length === 0 ? (
           <div className="text-center text-muted-foreground text-sm py-8">
             <p className="mb-2">Start a conversation</p>

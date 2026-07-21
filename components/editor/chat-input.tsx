@@ -2,7 +2,7 @@ import * as React from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { ChevronUp, Mic, ArrowRight } from 'lucide-react';
+import { ArrowUp, ChevronUp, Mic } from 'lucide-react';
 import { MessageType } from '@/types/script-chat';
 import { AI_MODELS, AIModelName } from '@/types/ai-models';
 import { useSpeechToText } from '@/hooks/use-speech-to-text';
@@ -13,7 +13,7 @@ import { ChatLine } from '@/components/icons/ask';
 import { EditLine } from '@/components/icons/edit';
 import { Brain as BrainIcon } from '@/components/icons/brain';
 import type { ChatAttachment } from '@/types/chat-attachments';
-import { AttachmentPicker, SelectedAttachmentChips } from './attachment-picker';
+import { AttachmentPicker, AttachmentTray } from './attachment-picker';
 
 const log = logger.child({ module: 'components/editor/chat-input' });
 
@@ -97,12 +97,14 @@ export function ChatInput({
     };
 
     const selectedModelConfig = Object.values(AI_MODELS).find(m => m.model === selectedModel) || AI_MODELS.GOOGLE_FLASH;
+    const canSubmit = Boolean(input.trim()) && !isGenerating && !hasBlockingAttachments;
 
     return (
-        <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-background via-background to-transparent pt-10 pointer-events-none">
-            <div className="pointer-events-auto rounded-2xl bg-[#2A2A2A]/40 dark:bg-[#1E1E1E] border border-border/50 shadow-sm transition-shadow flex flex-col p-1.5 backdrop-blur-md">
-                <SelectedAttachmentChips attachments={attachments} />
-                <Textarea
+        <div className="relative shrink-0 p-4 bg-gradient-to-t from-background via-background to-transparent pt-10 pointer-events-none">
+            <div className="pointer-events-auto relative flex flex-col items-center">
+                <AttachmentTray attachments={attachments} />
+                <div className="relative z-10 -mt-px flex w-full flex-col rounded-2xl border border-border/50 bg-[#2A2A2A]/40 p-1.5 shadow-sm backdrop-blur-md transition-shadow dark:bg-[#1E1E1E]">
+                    <Textarea
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={handleKeyDown}
@@ -110,8 +112,8 @@ export function ChatInput({
                     disabled={isGenerating}
                     className="custom-scrollbar min-h-[64px] max-h-[220px] w-full resize-none border-none bg-transparent px-2.5 py-3 text-sm shadow-none placeholder:text-muted-foreground/60 focus:outline-none focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0"
                     rows={1}
-                />
-                <div className="flex items-center justify-between px-1.5 pb-1">
+                    />
+                    <div className="flex items-center justify-between px-1.5 pb-1">
                     <div className="flex items-center gap-1">
                         <AttachmentPicker parentId={parentId} attachments={attachments} disabled={isGenerating} />
 
@@ -200,14 +202,20 @@ export function ChatInput({
                         )}
                         <Button
                             size="icon"
-                            className="h-6 w-6 rounded-full bg-[#1E1E1E] dark:bg-[#333333] hover:bg-[#333] text-foreground border border-border/50 transition-colors"
+                            className={cn(
+                                'h-6 w-6 rounded-full border transition-colors disabled:opacity-100',
+                                canSubmit
+                                    ? 'border-white/70 bg-[#F1F1EF] text-[#171717] hover:bg-white'
+                                    : 'border-border/50 bg-[#1E1E1E] text-muted-foreground dark:bg-[#333333]',
+                            )}
                             onClick={handleSend}
-                            disabled={!input.trim() || isGenerating || hasBlockingAttachments}
+                            disabled={!canSubmit}
                             title={hasBlockingAttachments ? 'Wait for selected files to finish scanning or deselect them' : undefined}
                         >
-                            <ArrowRight className="h-3 w-3" />
+                            <ArrowUp className="h-3 w-3" />
                         </Button>
                     </div>
+                </div>
                 </div>
             </div>
         </div>
