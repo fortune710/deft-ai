@@ -10,12 +10,57 @@ import { cn } from '@/lib/utils';
 import { logger } from '@/lib/logger';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import type { AttachmentReference } from '@/types/chat-attachments';
+
+const log = logger.child({ file: 'components/editor/chat-message.tsx' });
 
 interface ChatMessageProps {
   message: ChatMessageType;
   sessionId: string;
   onContentUpdate: (content: any) => void;
   editorContent: any;
+}
+
+function renderTaggedMessageContent(
+  content: string,
+  references: AttachmentReference[],
+  userId: string,
+  messageId: string,
+) {
+  const fileNames = references
+    .map((reference) => reference.fileName)
+    .filter((fileName, index, names) => names.indexOf(fileName) === index)
+    .sort((first, second) => second.length - first.length);
+  if (!fileNames.length) return content;
+  const escapedNames = fileNames.map((fileName) => fileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const matcher = new RegExp(`@(${escapedNames.join('|')})`, 'g');
+  const nodes: React.ReactNode[] = [];
+  let cursor = 0;
+  let mentionCount = 0;
+  for (const match of content.matchAll(matcher)) {
+    const start = match.index ?? 0;
+    nodes.push(content.slice(cursor, start));
+    nodes.push(
+      <span
+        key={`${start}-${match[1]}`}
+        className="mx-0.5 inline-flex max-w-[90%] items-center rounded-[5px] bg-white/[0.09] px-1.5 py-0.5 align-baseline text-xs font-semibold text-primary ring-1 ring-inset ring-white/10"
+        title={match[1]}
+        spellCheck={false}
+      >
+        <span className="truncate">@{match[1]}</span>
+      </span>,
+    );
+    cursor = start + match[0].length;
+    mentionCount += 1;
+  }
+  nodes.push(content.slice(cursor));
+  log.debug('Rendered tagged files in historical chat message', {
+    userId,
+    action: 'render_historical_chat_file_mentions',
+    messageId,
+    mentionCount,
+  });
+  return nodes;
 }
 
 export function ChatMessage({ message, sessionId, onContentUpdate, editorContent }: ChatMessageProps) {
@@ -137,6 +182,13 @@ export function ChatMessage({ message, sessionId, onContentUpdate, editorContent
 
   const isUser = message.role === 'user';
 
+  messageLog.debug('Rendering chat message', {
+    action: 'render_chat_message',
+    userId: message.user_id,
+    role: message.role,
+    attachmentCount: message.attachment_refs.length,
+  });
+
   return (
     <div className={cn("flex", isUser ? 'justify-end' : 'justify-start')}>
       <div
@@ -153,7 +205,14 @@ export function ChatMessage({ message, sessionId, onContentUpdate, editorContent
               </ReactMarkdown>
             </div>
           ) : (
-            <div className="whitespace-pre-wrap">{message.content}</div>
+            <div className="whitespace-pre-wrap">
+              {renderTaggedMessageContent(
+                message.content,
+                message.attachment_refs,
+                message.user_id,
+                message.id,
+              )}
+            </div>
           )}
         </div>
 
