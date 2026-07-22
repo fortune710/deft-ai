@@ -3,7 +3,6 @@
 import * as React from 'react';
 import {
   AlertTriangle,
-  Check,
   FileImage,
   FileText,
   Loader2,
@@ -148,6 +147,7 @@ export function AttachmentTray({ attachments }: AttachmentTrayProps) {
   ));
   const allSelected = selectableAttachments.length > 0
     && selectableAttachments.every((attachment) => attachment.isSelected);
+  const someSelected = selectableAttachments.some((attachment) => attachment.isSelected);
 
   const handleExpandedChange = () => {
     const nextExpanded = !expanded;
@@ -175,6 +175,33 @@ export function AttachmentTray({ attachments }: AttachmentTrayProps) {
         userId: userId || 'unknown',
         action: 'select_chat_attachment_from_tray',
         attachmentId: attachment.id,
+        error,
+      });
+    }
+  };
+
+  const handleSelectAll = async (checked: boolean) => {
+    const attachmentsToUpdate = selectableAttachments.filter(
+      (attachment) => attachment.isSelected !== checked,
+    );
+    try {
+      await Promise.all(attachmentsToUpdate.map((attachment) => select.mutateAsync({
+        attachmentId: attachment.id,
+        isSelected: checked,
+      })));
+      log.info('Changed all available attachment selections from tray', {
+        userId: userId || 'unknown',
+        action: 'select_all_chat_attachments_from_tray',
+        isSelected: checked,
+        attachmentCount: attachmentsToUpdate.length,
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to update file selections');
+      log.error('Failed to change all available attachment selections from tray', {
+        userId: userId || 'unknown',
+        action: 'select_all_chat_attachments_from_tray',
+        isSelected: checked,
+        attachmentCount: attachmentsToUpdate.length,
         error,
       });
     }
@@ -230,21 +257,26 @@ export function AttachmentTray({ attachments }: AttachmentTrayProps) {
       )}
       aria-label="Uploaded chat files"
     >
-      <button
-        type="button"
-        className="flex h-7 w-full items-center justify-between px-3 text-[10px] font-medium leading-none text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
-        onClick={handleExpandedChange}
-        aria-expanded={expanded}
-        aria-controls="chat-attachment-list"
-      >
-        <span className="tabular-nums">
-          {attachments.length} file{attachments.length === 1 ? '' : 's'}
-        </span>
-        <Check
-          className={cn('h-2.5 w-2.5 transition-opacity', allSelected ? 'text-emerald-300 opacity-100' : 'opacity-20')}
-          aria-label={allSelected ? 'All available files selected' : 'Some files are not selected'}
+      <div className="flex h-7 w-full items-center px-3 text-[11px] leading-none text-muted-foreground">
+        <button
+          type="button"
+          className="flex h-full min-w-0 flex-1 items-center text-left font-semibold transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+          onClick={handleExpandedChange}
+          aria-expanded={expanded}
+          aria-controls="chat-attachment-list"
+        >
+          <span className="tabular-nums">
+            {attachments.length} file{attachments.length === 1 ? '' : 's'}
+          </span>
+        </button>
+        <Checkbox
+          checked={allSelected ? true : someSelected ? 'indeterminate' : false}
+          disabled={!selectableAttachments.length || select.isPending}
+          onCheckedChange={(checked) => void handleSelectAll(checked === true)}
+          className="h-3 w-3 border-muted-foreground/60 data-[state=checked]:border-emerald-300/70 data-[state=checked]:bg-emerald-300 data-[state=checked]:text-[#222222] data-[state=indeterminate]:border-emerald-300/70 data-[state=indeterminate]:bg-emerald-300 data-[state=indeterminate]:text-[#222222] [&_svg]:h-2.5 [&_svg]:w-2.5"
+          aria-label={allSelected ? 'Deselect all available files' : 'Select all available files'}
         />
-      </button>
+      </div>
 
       <div id="chat-attachment-list" className="max-h-[226px] overflow-y-auto px-1.5 pb-2 pt-0">
         {attachments.map((attachment) => {

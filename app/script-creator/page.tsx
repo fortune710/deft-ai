@@ -8,7 +8,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
-  Plus,
   Loader2,
   FileText,
   Trash2,
@@ -21,8 +20,17 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { useChatSessions, useCreateSession, useDeleteSession } from '@/hooks/use-script-chats';
 import type { EditorContent } from '@/types/script-chat';
+import { FilmScriptFill } from '@/components/icons/script';
+import { logger } from '@/lib/logger';
+import { useAuth } from '@/hooks/use-clerk-auth';
+
+const log = logger.child({ file: 'app/script-creator/page.tsx' });
+
+const primaryCtaClassName =
+  'h-11 rounded-xl border border-primary/70 bg-gradient-to-b from-primary/80 to-primary px-6 font-semibold shadow-[0_2px_6px_hsl(var(--primary)/0.12)] transition-[background-image,box-shadow,transform] hover:from-primary/90 hover:to-primary/90 hover:shadow-[0_3px_8px_hsl(var(--primary)/0.16)] active:translate-y-px motion-reduce:transform-none';
 
 export default function ScriptCreatorPage() {
+  const { userId } = useAuth();
   const router = useRouter();
   const { profile, isLoading: profileLoading } = useContentProfile();
   const { data: sessions, isLoading: sessionsLoading } = useChatSessions();
@@ -35,6 +43,13 @@ export default function ScriptCreatorPage() {
 
   const primaryPlatform = profile?.question_3_platforms?.find((p) => p.isPrimary);
 
+  log.debug('Rendering script creator page', {
+    action: 'render_script_creator_page',
+    userId: userId || 'signed_out',
+    sessionCount: sessions?.length || 0,
+    isGenerating,
+  });
+
   useEffect(() => {
     if (!profileLoading && !profile) {
       router.push('/onboarding');
@@ -44,6 +59,12 @@ export default function ScriptCreatorPage() {
   const handleCreateScript = async () => {
     if (!newScriptPrompt.trim()) return;
 
+    log.info('Starting script generation', {
+      action: 'generate_script',
+      userId: userId || 'signed_out',
+      platform: primaryPlatform?.name || 'youtube',
+      promptLength: newScriptPrompt.trim().length,
+    });
     setIsGenerating(true);
 
     try {
@@ -56,7 +77,15 @@ export default function ScriptCreatorPage() {
         }),
       });
 
-      if (!response.ok) throw new Error('Failed to generate script');
+      if (!response.ok) {
+        log.error('Script generation request failed', {
+          action: 'generate_script',
+          userId: userId || 'signed_out',
+          statusCode: response.status,
+          error: response.statusText || 'Failed to generate script',
+        });
+        throw new Error('Failed to generate script');
+      }
 
       const generatedContent = await response.json();
 
@@ -82,9 +111,19 @@ export default function ScriptCreatorPage() {
       });
 
       toast.success('Script generated');
+      log.info('Script generated successfully', {
+        action: 'generate_script',
+        userId: userId || 'signed_out',
+        statusCode: response.status,
+        sessionId: session.id,
+      });
       router.push(`/script-creator/editor/${session.id}`);
     } catch (error) {
-      console.error('Error generating script:', error);
+      log.error('Failed to generate script', {
+        action: 'generate_script',
+        userId: userId || 'signed_out',
+        error: error instanceof Error ? error.message : String(error),
+      });
       toast.error('Failed to generate script');
     } finally {
       setIsGenerating(false);
@@ -94,10 +133,26 @@ export default function ScriptCreatorPage() {
   };
 
   const handleDeleteSession = async (sessionId: string) => {
+    log.info('Deleting script session', {
+      action: 'delete_script_session',
+      userId: userId || 'signed_out',
+      sessionId,
+    });
     try {
       await deleteSession.mutateAsync(sessionId);
       toast.success('Script deleted');
+      log.info('Script session deleted', {
+        action: 'delete_script_session',
+        userId: userId || 'signed_out',
+        sessionId,
+      });
     } catch (error) {
+      log.error('Failed to delete script session', {
+        action: 'delete_script_session',
+        userId: userId || 'signed_out',
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
       toast.error('Failed to delete script');
     }
   };
@@ -119,38 +174,40 @@ export default function ScriptCreatorPage() {
   return (
     <AppLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Script Creator</h1>
-            <p className="text-muted-foreground">
+        <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-1">
+            <h1 className="bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text font-alan-sans text-4xl font-bold tracking-tight text-transparent">
+              Script Creator
+            </h1>
+            <p className="font-inter text-lg text-muted-foreground">
               Create and edit AI-powered video scripts
             </p>
           </div>
-          <Button onClick={() => setShowNewScriptDialog(true)} size="lg">
-            <Plus className="h-5 w-5 mr-2" />
+          <Button
+            onClick={() => setShowNewScriptDialog(true)}
+            size="lg"
+            className={primaryCtaClassName}
+          >
             New Script
           </Button>
         </div>
 
         {!sessions || sessions.length === 0 ? (
-          <Card className="border-dashed">
-            <CardHeader className="text-center py-12">
-              <div className="flex justify-center mb-4">
-                <Sparkles className="h-12 w-12 text-yellow-500" />
-              </div>
-              <CardTitle>Create Your First Script</CardTitle>
-              <CardDescription className="max-w-md mx-auto">
-                Describe your video idea and get an instant, production-ready script with hooks,
-                visual direction, and more. Then refine it through conversation.
-              </CardDescription>
-              <div className="pt-4">
-                <Button onClick={() => setShowNewScriptDialog(true)} size="lg">
-                  <Plus className="h-5 w-5 mr-2" />
-                  Get Started
-                </Button>
-              </div>
-            </CardHeader>
-          </Card>
+          <div className="flex min-h-[400px] flex-col items-center justify-center py-12 text-center">
+            <FilmScriptFill className="mb-5 h-12 w-12 text-primary" aria-hidden="true" />
+            <h2 className="text-2xl font-bold">Create Your First Script</h2>
+            <p className="mx-auto mt-3 max-w-lg text-muted-foreground">
+              Turn your next idea into a ready-to-record script with scroll-stopping hooks,
+              clear visual direction, and a CTA built to convert.
+            </p>
+            <Button
+              onClick={() => setShowNewScriptDialog(true)}
+              size="lg"
+              className={`${primaryCtaClassName} mt-6`}
+            >
+              Create Script
+            </Button>
+          </div>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {sessions.map((session) => {
@@ -210,7 +267,7 @@ export default function ScriptCreatorPage() {
             <DialogHeader>
               <DialogTitle>Create New Script</DialogTitle>
               <DialogDescription>
-                Describe your video idea and we'll generate a complete script instantly
+                Describe your video idea and we&apos;ll generate a complete script instantly
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">

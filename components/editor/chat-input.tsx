@@ -1,6 +1,5 @@
 import * as React from 'react';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ArrowUp, ChevronUp, Mic } from 'lucide-react';
 import { MessageType } from '@/types/script-chat';
@@ -14,6 +13,7 @@ import { EditLine } from '@/components/icons/edit';
 import { Brain as BrainIcon } from '@/components/icons/brain';
 import type { ChatAttachment } from '@/types/chat-attachments';
 import { AttachmentPicker, AttachmentTray } from './attachment-picker';
+import { FileMentionTextarea } from './file-mention-textarea';
 
 const log = logger.child({ module: 'components/editor/chat-input' });
 
@@ -104,14 +104,13 @@ export function ChatInput({
             <div className="pointer-events-auto relative flex flex-col items-center">
                 <AttachmentTray attachments={attachments} />
                 <div className="relative z-10 -mt-px flex w-full flex-col rounded-2xl border border-border/50 bg-[#2A2A2A]/40 p-1.5 shadow-sm backdrop-blur-md transition-shadow dark:bg-[#1E1E1E]">
-                    <Textarea
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Ask anything, @ to mention, / for workflows"
-                    disabled={isGenerating}
-                    className="custom-scrollbar min-h-[64px] max-h-[220px] w-full resize-none border-none bg-transparent px-2.5 py-3 text-sm shadow-none placeholder:text-muted-foreground/60 focus:outline-none focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-                    rows={1}
+                    <FileMentionTextarea
+                        value={input}
+                        onChange={setInput}
+                        onKeyDown={handleKeyDown}
+                        disabled={isGenerating}
+                        parentId={parentId}
+                        attachments={attachments}
                     />
                     <div className="flex items-center justify-between px-1.5 pb-1">
                     <div className="flex items-center gap-1">
