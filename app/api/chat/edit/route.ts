@@ -6,6 +6,7 @@ import { api } from '@/convex/_generated/api';
 import { ConvexServerAuthError, getAuthenticatedConvexClient, toUserContentProfile } from '@/lib/convex/server';
 import type { Id } from '@/convex/_generated/dataModel';
 import { generateAttachmentAwareEdit } from '@/lib/ai/attachments/chat-agent';
+import { anchorEditProposalsToCurrentContent } from '@/lib/script-editing/proposals';
 
 export async function POST(req: NextRequest) {
   const startTime = Date.now();
@@ -72,6 +73,29 @@ export async function POST(req: NextRequest) {
         sessionId
       );
     }
+
+    const anchoredChanges = anchorEditProposalsToCurrentContent(
+      result.proposedChanges ?? [],
+      currentContent,
+      userId,
+    );
+    if (!anchoredChanges.length) {
+      log.warn('Generated edit proposals did not match the current script snapshot', {
+        userId,
+        action: 'validate_edit_proposals_against_current_script',
+        sessionId,
+        generatedProposalCount: result.proposedChanges?.length ?? 0,
+        statusCode: 422,
+      });
+      return NextResponse.json(
+        {
+          error:
+            'The assistant could not anchor its suggestions to the current script. Please try again.',
+        },
+        { status: 422 },
+      );
+    }
+    result = { ...result, proposedChanges: anchoredChanges };
 
     log.info('Generated edit proposal successfully', {
       content: result.content,

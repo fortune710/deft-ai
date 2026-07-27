@@ -44,8 +44,8 @@ const EditProposalSchema = z.object({
   content: z.string().describe("A brief explanation of the proposed changes"),
   proposedChanges: z.array(z.object({
     section: z.string().describe("The section being edited (e.g., 'markdown', 'fullScript', 'hook')"),
-    before: z.string().describe("The original text being replaced"),
-    after: z.string().describe("The new text/content providing the complete updated script"),
+    before: z.string().describe("An exact contiguous substring copied verbatim from the current script"),
+    after: z.string().describe("Only the localized replacement for the exact text in before"),
     description: z.string().describe("Why this change was made")
   }))
 });
@@ -121,7 +121,11 @@ USER'S EDIT REQUEST:
 ${editRequest}
 
 Analyze the request and generate specific edit proposals.
-If the request is for a complete rewrite, provide the entire updated Markdown in the 'after' field.
+Return one localized proposal for each distinct change.
+For every proposal, copy an exact, contiguous substring from CURRENT SCRIPT CONTENT into 'before'.
+Put only the replacement for that substring in 'after', never the entire script.
+Keep proposals narrowly scoped to a paragraph, sentence, hook, or CTA.
+When several parts need changes, return several independent proposals so each can be accepted or rejected separately.
 `.trim();
 
   try {

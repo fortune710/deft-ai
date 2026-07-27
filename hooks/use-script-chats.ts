@@ -10,6 +10,7 @@ import { api } from '@/convex/_generated/api';
 import type { Doc, Id } from '@/convex/_generated/dataModel';
 import { useAuth } from '@/hooks/use-clerk-auth';
 import { logger } from '@/lib/logger';
+import { resolveEditProposalStatus } from '@/lib/script-editing/proposals';
 import type { ChatMessage, ChatSession, EditorContent, EditProposal } from '@/types/script-chat';
 
 const log = logger.child({ module: 'hooks/use-script-chats' });
@@ -141,7 +142,13 @@ export function useUpdateEditorContent() {
   });
 
   return useAsyncMutation({
-    mutationFn: async ({ sessionId, editorContent }: { sessionId: string; editorContent: EditorContent }) => {
+    mutationFn: async ({
+      sessionId,
+      editorContent,
+    }: {
+      sessionId: string;
+      editorContent: EditorContent | string;
+    }) => {
       log.info('Updating Convex script editor content', {
         userId: userId || 'unknown',
         action: 'update_script_editor_content',
@@ -326,6 +333,69 @@ export function useUpdateMessageStatus() {
       });
       return updateMessageStatus({
         messageId: messageId as Id<'script_chat_messages'>,
+        status,
+      });
+    },
+  });
+}
+
+export function useResolveEditProposal() {
+  const { userId } = useAuth();
+  const resolveProposal = useConvexMutation(api.scriptChats.resolveEditProposal)
+    .withOptimisticUpdate((localStore, args) => {
+      const messageQueries = localStore.getAllQueries(api.scriptChats.listMessages);
+      for (const query of messageQueries) {
+        if (!query.value) continue;
+        localStore.setQuery(
+          api.scriptChats.listMessages,
+          query.args,
+          query.value.map((message) => {
+            if (message._id !== args.messageId || !Array.isArray(message.proposed_changes)) {
+              return message;
+            }
+            const resolution = resolveEditProposalStatus(
+              message.proposed_changes as EditProposal[],
+              args.proposalIndex,
+              args.status,
+              userId || 'unknown',
+            );
+            return {
+              ...message,
+              proposed_changes: resolution.proposals,
+              change_status: resolution.aggregateStatus,
+            };
+          }),
+        );
+      }
+    });
+  log.debug('Prepared optimistic individual edit proposal resolution', {
+    userId: userId || 'signed_out',
+    action: 'prepare_resolve_individual_edit_proposal',
+  });
+
+  return useAsyncMutation({
+    mutationFn: ({
+      messageId,
+      proposalIndex,
+      status,
+      sessionId,
+    }: {
+      messageId: string;
+      proposalIndex: number;
+      status: 'accepted' | 'rejected';
+      sessionId: string;
+    }) => {
+      log.info('Resolving one Convex edit proposal', {
+        userId: userId || 'unknown',
+        action: 'resolve_individual_edit_proposal',
+        sessionId,
+        messageId,
+        proposalIndex,
+        status,
+      });
+      return resolveProposal({
+        messageId: messageId as Id<'script_chat_messages'>,
+        proposalIndex,
         status,
       });
     },

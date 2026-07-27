@@ -1,24 +1,29 @@
 'use client';
 
+import { useState } from 'react';
 import { ChatMessage as ChatMessageType, EditorContent } from '@/types/script-chat';
-import { Button } from '../ui/button';
-import { Check, Paperclip, X } from 'lucide-react';
-import { useUpdateMessageStatus, useUpdateEditorContent } from '@/hooks/use-script-chats';
+import { Paperclip } from 'lucide-react';
+import { useResolveEditProposal, useUpdateEditorContent } from '@/hooks/use-script-chats';
 import { toast } from 'sonner';
 import { EditProposalDisplay } from './edit-proposal-display';
 import { cn } from '@/lib/utils';
 import { logger } from '@/lib/logger';
+import {
+  applyEditProposalToContent,
+  rejectEditProposalInContent,
+} from '@/lib/script-editing/proposals';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { AttachmentReference } from '@/types/chat-attachments';
+import type { EditProposal } from '@/types/script-chat';
 
 const log = logger.child({ file: 'components/editor/chat-message.tsx' });
 
 interface ChatMessageProps {
   message: ChatMessageType;
   sessionId: string;
-  onContentUpdate: (content: any) => void;
-  editorContent: any;
+  onContentUpdate: (content: EditorContent | string) => void;
+  editorContent: EditorContent | string;
 }
 
 function renderTaggedMessageContent(
@@ -64,7 +69,8 @@ function renderTaggedMessageContent(
 }
 
 export function ChatMessage({ message, sessionId, onContentUpdate, editorContent }: ChatMessageProps) {
-  const updateStatus = useUpdateMessageStatus();
+  const [resolvingProposalIndex, setResolvingProposalIndex] = useState<number | null>(null);
+  const resolveProposal = useResolveEditProposal();
   const updateEditorContent = useUpdateEditorContent();
   const messageLog = logger.child({
     file: 'components/editor/chat-message.tsx',
@@ -73,110 +79,114 @@ export function ChatMessage({ message, sessionId, onContentUpdate, editorContent
     messageId: message.id,
   });
 
-  const handleAccept = async () => {
-    if (!message.proposed_changes) {
-      messageLog.warn('No proposed changes to accept', {
-        action: 'accept_proposed_changes',
+  const handleAcceptProposal = async (proposal: EditProposal, proposalIndex: number) => {
+    const result = applyEditProposalToContent(
+      editorContent,
+      proposal,
+      message.user_id,
+      { messageId: message.id, proposalIndex },
+    );
+    if (!result.applied) {
+      const errorMessage = result.reason === 'scope_too_broad'
+        ? 'This suggestion is too broad to apply safely. Ask the assistant for smaller edits.'
+        : 'This suggestion no longer matches the current script.';
+      toast.error(errorMessage);
+      messageLog.warn('Refused to apply an unsafe or stale edit proposal', {
+        action: 'accept_individual_edit_proposal',
         userId: message.user_id,
+        proposalIndex,
+        section: proposal.section,
+        reason: result.reason,
       });
       return;
     }
 
+    setResolvingProposalIndex(proposalIndex);
     try {
-      messageLog.info('Applying proposed changes', {
-        action: 'accept_proposed_changes',
+      messageLog.info('Applying one proposed change', {
+        action: 'accept_individual_edit_proposal',
         userId: message.user_id,
-        proposedChangesCount: message.proposed_changes.length,
+        proposalIndex,
+        section: proposal.section,
       });
-
-      let updatedContent = typeof editorContent === 'string' ? editorContent : { ...editorContent };
-
-      for (const change of message.proposed_changes) {
-        if (typeof updatedContent === 'string') {
-          // If the section is 'markdown' or generic, we just replace the entire content or try string replacement
-          if (change.section === 'markdown') {
-            updatedContent = change.after;
-          } else {
-            // Apply diff or simple string replacement if possible
-            if (updatedContent.includes(change.before) && change.before.trim() !== '') {
-              updatedContent = updatedContent.replace(change.before, change.after);
-            } else {
-              updatedContent = change.after; // Fallback replacing the whole document
-            }
-          }
-        } else {
-          // Legacy object updating
-          if (change.section === 'fullScript') {
-            updatedContent.fullScript = change.after;
-          } else if (change.section === 'goalAlignedCTA') {
-            updatedContent.goalAlignedCTA = change.after;
-          } else if (change.section === 'hookOptions') {
-            try {
-              const newHooks = JSON.parse(change.after);
-              updatedContent.hookOptions = newHooks;
-            } catch (error) {
-              messageLog.error('Failed to parse hook options from proposal', {
-                action: 'parse_hook_options',
-                userId: message.user_id,
-                section: change.section,
-                error,
-              });
-            }
-          }
-        }
-      }
 
       await updateEditorContent.mutateAsync({
         sessionId,
-        editorContent: updatedContent,
+        editorContent: result.content,
       });
 
-      await updateStatus.mutateAsync({
+      await resolveProposal.mutateAsync({
         messageId: message.id,
+        proposalIndex,
         status: 'accepted',
         sessionId,
       });
 
-      onContentUpdate(updatedContent);
-      toast.success('Changes applied');
-      messageLog.info('Proposed changes accepted and applied', {
-        action: 'accept_proposed_changes',
+      onContentUpdate(result.content);
+      toast.success('Suggestion applied');
+      messageLog.info('Individual proposal accepted and applied', {
+        action: 'accept_individual_edit_proposal',
         userId: message.user_id,
+        proposalIndex,
       });
     } catch (error) {
-      messageLog.error('Failed to apply proposed changes', {
-        action: 'accept_proposed_changes',
+      messageLog.error('Failed to apply an individual proposed change', {
+        action: 'accept_individual_edit_proposal',
         userId: message.user_id,
+        proposalIndex,
         error,
       });
-      toast.error('Failed to apply changes');
+      toast.error('Failed to apply suggestion');
+    } finally {
+      setResolvingProposalIndex(null);
     }
   };
 
-  const handleReject = async () => {
+  const handleRejectProposal = async (_proposal: EditProposal, proposalIndex: number) => {
+    const proposal = _proposal;
+    const result = rejectEditProposalInContent(
+      editorContent,
+      proposal,
+      message.user_id,
+      { messageId: message.id, proposalIndex },
+    );
+    setResolvingProposalIndex(proposalIndex);
     try {
-      messageLog.info('Rejecting proposed changes', {
-        action: 'reject_proposed_changes',
+      messageLog.info('Rejecting one proposed change', {
+        action: 'reject_individual_edit_proposal',
         userId: message.user_id,
+        proposalIndex,
       });
 
-      await updateStatus.mutateAsync({
+      if (result.content !== editorContent) {
+        await updateEditorContent.mutateAsync({
+          sessionId,
+          editorContent: result.content,
+        });
+        onContentUpdate(result.content);
+      }
+      await resolveProposal.mutateAsync({
         messageId: message.id,
+        proposalIndex,
         status: 'rejected',
         sessionId,
       });
-      toast.success('Changes rejected');
-      messageLog.info('Proposed changes rejected', {
-        action: 'reject_proposed_changes',
+      toast.success('Suggestion rejected');
+      messageLog.info('Individual proposal rejected', {
+        action: 'reject_individual_edit_proposal',
         userId: message.user_id,
+        proposalIndex,
       });
     } catch (error) {
-      messageLog.error('Failed to reject proposed changes', {
-        action: 'reject_proposed_changes',
+      messageLog.error('Failed to reject an individual proposed change', {
+        action: 'reject_individual_edit_proposal',
         userId: message.user_id,
+        proposalIndex,
         error,
       });
-      toast.error('Failed to reject changes');
+      toast.error('Failed to reject suggestion');
+    } finally {
+      setResolvingProposalIndex(null);
     }
   };
 
@@ -233,40 +243,17 @@ export function ChatMessage({ message, sessionId, onContentUpdate, editorContent
         {message.message_type === 'edit' &&
           message.role === 'assistant' &&
           message.proposed_changes &&
-          message.change_status === 'pending' && (
+          message.proposed_changes.length > 0 && (
             <div className="mt-3 space-y-3">
-              <EditProposalDisplay proposals={message.proposed_changes} />
-              <div className="flex gap-2 w-full md:w-1/2">
-                <Button
-                  size="sm"
-                  onClick={handleAccept}
-                  disabled={updateStatus.isPending}
-                  className="flex-1 rounded-lg"
-                >
-                  <Check className="h-4 w-4" />
-                  Accept
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleReject}
-                  disabled={updateStatus.isPending}
-                  className="flex-1 rounded-lg"
-                >
-                  <X className="h-4 w-4" />
-                  Reject
-                </Button>
-              </div>
+              <EditProposalDisplay
+                proposals={message.proposed_changes}
+                fallbackStatus={message.change_status ?? 'pending'}
+                resolvingIndex={resolvingProposalIndex}
+                onAccept={handleAcceptProposal}
+                onReject={handleRejectProposal}
+              />
             </div>
           )}
-
-        {message.change_status === 'accepted' && (
-          <div className="mt-2 text-xs opacity-70">✓ Changes applied</div>
-        )}
-
-        {message.change_status === 'rejected' && (
-          <div className="mt-2 text-xs opacity-70">✗ Changes rejected</div>
-        )}
 
       </div>
     </div>

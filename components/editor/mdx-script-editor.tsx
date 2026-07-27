@@ -1,6 +1,6 @@
 'use client';
 
-import { forwardRef, useImperativeHandle, useRef, useState, useEffect } from 'react';
+import { forwardRef, useImperativeHandle, useRef } from 'react';
 import {
     MDXEditor,
     headingsPlugin,
@@ -19,52 +19,100 @@ import {
     ListsToggle,
 } from '@mdxeditor/editor';
 import '@mdxeditor/editor/style.css';
-import { suggestedEditPlugin, SuggestedEditNode } from './suggested-edit-plugin';
-import { $getRoot, TextNode } from 'lexical';
+import { suggestedEditPlugin } from './suggested-edit-plugin';
 import { EditProposal } from '@/types/script-chat';
 import { logger } from '@/lib/logger';
+import { createSuggestionMarkup } from '@/lib/script-editing/proposals';
 
 const log = logger.child({ module: 'MdxScriptEditor' });
 
 export interface MdxScriptEditorRef {
     setMarkdown: (markdown: string) => void;
     getMarkdown: () => string;
-    applyProposal: (proposal: EditProposal) => boolean;
+    applyProposals: (
+        proposals: EditProposal[],
+        messageId: string,
+    ) => { appliedIndices: number[]; markdown: string };
 }
 
 interface MdxScriptEditorProps {
     initialMarkdown: string;
     onChange?: (markdown: string) => void;
     isSaving?: boolean;
+    userId: string;
 }
 
 export const MdxScriptEditor = forwardRef<MdxScriptEditorRef, MdxScriptEditorProps>(
-    ({ initialMarkdown, onChange, isSaving }, ref) => {
+    ({ initialMarkdown, onChange, isSaving, userId }, ref) => {
         const editorRef = useRef<MDXEditorMethods>(null);
 
         useImperativeHandle(ref, () => ({
             setMarkdown: (markdown: string) => {
+                log.debug('Setting script editor markdown', {
+                    userId,
+                    action: 'set_script_editor_markdown',
+                    markdownLength: markdown.length,
+                });
                 editorRef.current?.setMarkdown(markdown);
             },
             getMarkdown: () => {
-                return editorRef.current?.getMarkdown() || '';
+                const markdown = editorRef.current?.getMarkdown() || '';
+                log.debug('Read current script editor markdown', {
+                    userId,
+                    action: 'get_script_editor_markdown',
+                    markdownLength: markdown.length,
+                });
+                return markdown;
             },
-            applyProposal: (proposal: EditProposal, messageId?: string) => {
-                log.info('Applying proposal to editor markdown', { proposal, messageId });
-                const currentMarkdown = editorRef.current?.getMarkdown() || '';
-                
-                // Simple case: exact match
-                if (proposal.before.trim() !== '' && currentMarkdown.includes(proposal.before)) {
-                    const tag = `<suggestion before="${proposal.before.replace(/"/g, '&quot;')}" after="${proposal.after.replace(/"/g, '&quot;')}" id="${Math.random().toString()}" messageId="${messageId || ''}" />`;
-                    const nextMarkdown = currentMarkdown.replace(proposal.before, tag);
-                    editorRef.current?.setMarkdown(nextMarkdown);
-                    return true;
+            applyProposals: (proposals: EditProposal[], messageId: string) => {
+                let markdown = editorRef.current?.getMarkdown() || '';
+                const appliedIndices: number[] = [];
+                for (const [proposalIndex, proposal] of proposals.entries()) {
+                    if ((proposal.status ?? 'pending') !== 'pending') {
+                        log.debug('Skipped a resolved proposal while restoring editor highlights', {
+                            userId,
+                            action: 'highlight_script_edit_proposal',
+                            messageId,
+                            proposalIndex,
+                            status: proposal.status,
+                        });
+                        continue;
+                    }
+                    if (
+                        !proposal.before.trim() ||
+                        !markdown.includes(proposal.before)
+                    ) {
+                        log.warn('Could not highlight a proposal outside the current editor text', {
+                            userId,
+                            action: 'highlight_script_edit_proposal',
+                            messageId,
+                            proposalIndex,
+                            section: proposal.section,
+                            sourceLength: proposal.before.length,
+                        });
+                        continue;
+                    }
+                    const markup = createSuggestionMarkup(
+                        proposal,
+                        { messageId, proposalIndex },
+                        userId,
+                    );
+                    markdown = markdown.replace(proposal.before, markup);
+                    appliedIndices.push(proposalIndex);
                 }
-                
-                // If it's an addition or we can't find the exact block, we might want to append it?
-                // But generally the AI provides a context.
-                return false;
-            }
+                if (appliedIndices.length) {
+                    editorRef.current?.setMarkdown(markdown);
+                }
+                log.info('Highlighted exact edit proposal ranges in the script editor', {
+                    userId,
+                    action: 'highlight_script_edit_proposals',
+                    messageId,
+                    proposalCount: proposals.length,
+                    highlightedProposalCount: appliedIndices.length,
+                    highlightedProposalIndices: appliedIndices,
+                });
+                return { appliedIndices, markdown };
+            },
         }));
 
         // Some aesthetics: remove basic borders, add subtle shadows, great typography

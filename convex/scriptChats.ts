@@ -1,6 +1,8 @@
 import { ConvexError, v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import { logger } from '../lib/logger';
+import { resolveEditProposalStatus } from '../lib/script-editing/proposals';
+import type { EditProposal } from '../types/script-chat';
 
 const log = logger.child({ file: 'convex/scriptChats.ts' });
 
@@ -273,6 +275,73 @@ export const updateMessageStatus = mutation({
       throw new ConvexError('Chat message not found');
     }
     await ctx.db.patch(args.messageId, { change_status: args.status });
+    return await ctx.db.get(args.messageId);
+  },
+});
+
+export const resolveEditProposal = mutation({
+  args: {
+    messageId: v.id('script_chat_messages'),
+    proposalIndex: v.number(),
+    status: v.union(v.literal('accepted'), v.literal('rejected')),
+  },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const message = await ctx.db.get(args.messageId);
+    if (!message || message.user_id !== userId) {
+      log.warn('Rejected edit proposal resolution for an unknown message', {
+        userId,
+        action: 'resolve_individual_edit_proposal',
+        messageId: args.messageId,
+        proposalIndex: args.proposalIndex,
+        status: args.status,
+        statusCode: 404,
+      });
+      throw new ConvexError('Chat message not found');
+    }
+
+    const proposals = Array.isArray(message.proposed_changes)
+      ? message.proposed_changes as EditProposal[]
+      : [];
+    let resolution;
+    try {
+      resolution = resolveEditProposalStatus(
+        proposals,
+        args.proposalIndex,
+        args.status,
+        userId,
+      );
+    } catch (error) {
+      log.warn('Rejected an invalid individual edit proposal resolution', {
+        userId,
+        action: 'resolve_individual_edit_proposal',
+        messageId: args.messageId,
+        proposalIndex: args.proposalIndex,
+        proposalCount: proposals.length,
+        status: args.status,
+        statusCode: 400,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new ConvexError(
+        error instanceof Error ? error.message : 'Invalid proposal resolution',
+      );
+    }
+
+    await ctx.db.patch(args.messageId, {
+      proposed_changes: resolution.proposals,
+      change_status: resolution.aggregateStatus,
+    });
+    log.info('Persisted an individual edit proposal resolution', {
+      userId,
+      action: 'resolve_individual_edit_proposal',
+      messageId: args.messageId,
+      proposalIndex: args.proposalIndex,
+      proposalCount: proposals.length,
+      status: args.status,
+      aggregateStatus: resolution.aggregateStatus,
+      statusCode: 200,
+    });
     return await ctx.db.get(args.messageId);
   },
 });

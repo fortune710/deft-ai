@@ -1,12 +1,33 @@
-import { DecoratorNode, NodeKey, LexicalNode, SerializedLexicalNode, LexicalEditor, EditorConfig, $createTextNode, $getRoot, $getNodeByKey, TextNode } from 'lexical';
+import { DecoratorNode, NodeKey, LexicalNode, SerializedLexicalNode, LexicalEditor, EditorConfig, $createTextNode } from 'lexical';
 import { realmPlugin, addLexicalNode$, addImportVisitor$, addExportVisitor$ } from '@mdxeditor/editor';
-import React from 'react';
 import { Check, X, ArrowRight } from 'lucide-react';
 import { Button } from '../ui/button';
-import { cn } from '@/lib/utils';
 import { logger } from '@/lib/logger';
 
 const log = logger.child({ module: 'SuggestedEditPlugin' });
+
+function decodeSuggestionAttribute(value: string, attribute: string) {
+  try {
+    const decoded = decodeURIComponent(value).replaceAll('&quot;', '"');
+    log.debug('Decoded highlighted suggestion attribute', {
+      userId: 'unknown',
+      action: 'decode_highlighted_suggestion_attribute',
+      attribute,
+      valueLength: value.length,
+      decodedLength: decoded.length,
+    });
+    return decoded;
+  } catch (error) {
+    log.warn('Fell back while decoding a legacy suggestion attribute', {
+      userId: 'unknown',
+      action: 'decode_highlighted_suggestion_attribute',
+      attribute,
+      valueLength: value.length,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return value.replaceAll('&quot;', '"');
+  }
+}
 
 export type SerializedSuggestedEditNode = SerializedLexicalNode & {
   before: string;
@@ -95,16 +116,27 @@ export class SuggestedEditNode extends DecoratorNode<JSX.Element> {
               size="sm"
               className="h-8 border-destructive/20 text-destructive hover:bg-destructive/10 hover:text-destructive rounded-full px-4 text-xs font-semibold transition-all group"
               onClick={() => {
-                log.info('Rejected proposal', { id: this.__id });
-                if (this.__messageId) {
-                  window.dispatchEvent(new CustomEvent('proposal-resolved', { 
-                    detail: { messageId: this.__messageId, status: 'rejected' } 
-                  }));
-                }
+                const proposalIndex = Number(this.__id.split(':').at(-1));
+                log.info('Rejected highlighted proposal', {
+                  userId: 'unknown',
+                  action: 'reject_highlighted_script_proposal',
+                  id: this.__id,
+                  messageId: this.__messageId,
+                  proposalIndex,
+                });
                 editor.update(() => {
                   const textNode = $createTextNode(this.__before);
                   this.replace(textNode);
                 });
+                if (this.__messageId) {
+                  window.dispatchEvent(new CustomEvent('proposal-resolved', {
+                    detail: {
+                      messageId: this.__messageId,
+                      proposalIndex,
+                      status: 'rejected',
+                    },
+                  }));
+                }
               }}
             >
               <X className="h-3.5 w-3.5 mr-1 group-hover:rotate-90 transition-transform" />
@@ -114,16 +146,27 @@ export class SuggestedEditNode extends DecoratorNode<JSX.Element> {
               size="sm"
               className="h-8 bg-green-600 hover:bg-green-700 text-white rounded-full px-5 text-xs font-bold shadow-lg shadow-green-600/20 transition-all hover:scale-105 active:scale-95 flex items-center"
               onClick={() => {
-                log.info('Accepted proposal', { id: this.__id });
-                if (this.__messageId) {
-                  window.dispatchEvent(new CustomEvent('proposal-resolved', { 
-                    detail: { messageId: this.__messageId, status: 'accepted' } 
-                  }));
-                }
+                const proposalIndex = Number(this.__id.split(':').at(-1));
+                log.info('Accepted highlighted proposal', {
+                  userId: 'unknown',
+                  action: 'accept_highlighted_script_proposal',
+                  id: this.__id,
+                  messageId: this.__messageId,
+                  proposalIndex,
+                });
                 editor.update(() => {
                   const textNode = $createTextNode(this.__after);
                   this.replace(textNode);
                 });
+                if (this.__messageId) {
+                  window.dispatchEvent(new CustomEvent('proposal-resolved', {
+                    detail: {
+                      messageId: this.__messageId,
+                      proposalIndex,
+                      status: 'accepted',
+                    },
+                  }));
+                }
               }}
             >
               <Check className="h-3.5 w-3.5 mr-1" />
@@ -143,10 +186,18 @@ export const suggestedEditPlugin = realmPlugin<{}>({
       testNode: (node: any) => node.type === 'html' && node.value.startsWith('<suggestion'),
       visitNode: ({ mdastNode, actions }: any) => {
         const value = mdastNode.value as string;
-        const before = value.match(/before="([^"]*)"/)?.[1] || '';
-        const after = value.match(/after="([^"]*)"/)?.[1] || '';
-        const id = value.match(/id="([^"]*)"/)?.[1] || '';
-        const messageId = value.match(/messageId="([^"]*)"/)?.[1] || '';
+        const before = decodeSuggestionAttribute(value.match(/before="([^"]*)"/)?.[1] || '', 'before');
+        const after = decodeSuggestionAttribute(value.match(/after="([^"]*)"/)?.[1] || '', 'after');
+        const id = decodeSuggestionAttribute(value.match(/id="([^"]*)"/)?.[1] || '', 'id');
+        const messageId = decodeSuggestionAttribute(value.match(/messageId="([^"]*)"/)?.[1] || '', 'messageId');
+        log.debug('Imported highlighted edit proposal into the script editor', {
+          userId: 'unknown',
+          action: 'import_highlighted_script_proposal',
+          messageId,
+          proposalId: id,
+          sourceLength: before.length,
+          replacementLength: after.length,
+        });
         actions.addAndStepInto(new SuggestedEditNode(before, after, id, messageId));
       }
     });
@@ -154,8 +205,16 @@ export const suggestedEditPlugin = realmPlugin<{}>({
     realm.pub(addExportVisitor$, {
       testLexicalNode: (lexicalNode: LexicalNode): lexicalNode is SuggestedEditNode => lexicalNode instanceof SuggestedEditNode,
       visitLexicalNode: ({ lexicalNode, actions }: any) => {
+        log.debug('Exported highlighted edit proposal from the script editor', {
+          userId: 'unknown',
+          action: 'export_highlighted_script_proposal',
+          messageId: lexicalNode.__messageId,
+          proposalId: lexicalNode.__id,
+          sourceLength: lexicalNode.__before.length,
+          replacementLength: lexicalNode.__after.length,
+        });
         actions.addProperty('type', 'html');
-        actions.addProperty('value', `<suggestion before="${lexicalNode.__before}" after="${lexicalNode.__after}" id="${lexicalNode.__id}" messageId="${lexicalNode.__messageId}" />`);
+        actions.addProperty('value', `<suggestion before="${encodeURIComponent(lexicalNode.__before)}" after="${encodeURIComponent(lexicalNode.__after)}" id="${encodeURIComponent(lexicalNode.__id)}" messageId="${encodeURIComponent(lexicalNode.__messageId)}" />`);
       }
     });
   }
