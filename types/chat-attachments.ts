@@ -1,11 +1,6 @@
 export type ChatParentId = string;
 
-export type AttachmentProcessingStatus =
-  | 'queued'
-  | 'processing'
-  | 'ready'
-  | 'failed'
-  | 'quarantined';
+export type AttachmentProcessingStatus = 'queued' | 'processing' | 'ready' | 'failed' | 'quarantined';
 
 export type AttachmentSecurityStatus = 'pending' | 'passed' | 'blocked';
 
@@ -34,6 +29,7 @@ export interface ChatAttachment {
   securityStatus: AttachmentSecurityStatus;
   securityFindings: AttachmentSecurityFinding[];
   processingError?: string;
+  previewUrl?: string;
   chunkCount: number;
   createdAt: string;
   updatedAt: string;

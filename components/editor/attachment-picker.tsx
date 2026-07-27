@@ -114,7 +114,7 @@ export function AttachmentPicker({ parentId, attachments, disabled }: Attachment
         ref={inputRef}
         type="file"
         multiple
-        accept=".pdf,.docx,.txt,.md,.png,.jpg,.jpeg,.webp"
+        accept=".pdf,.docx,.txt,.md,.png,.jpg,.jpeg,.webp,.mp3,.wav,.m4a,.mp4,.webm,.mov"
         onChange={(event) => void handleFiles(event)}
         className="sr-only"
       />

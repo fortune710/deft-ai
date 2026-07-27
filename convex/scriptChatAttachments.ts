@@ -3,19 +3,46 @@ import { action, internalQuery, mutation, query } from './_generated/server';
 import { internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { logger } from '../lib/logger';
-import {
-  CHAT_ATTACHMENT_EMBEDDING_DIMENSIONS,
-  CHAT_ATTACHMENT_RETRIEVAL_LIMIT,
-} from '../lib/ai/attachments/constants';
+import { CHAT_ATTACHMENT_EMBEDDING_DIMENSIONS, CHAT_ATTACHMENT_RETRIEVAL_LIMIT } from '../lib/ai/attachments/constants';
 
 const log = logger.child({ file: 'convex/scriptChatAttachments.ts' });
 
 const parentId = v.union(v.id('script_chat_sessions'), v.id('content_items'));
+const attachmentWithPreview = v.object({
+  _id: v.id('script_chat_attachments'),
+  _creationTime: v.number(),
+  parent_id: parentId,
+  user_id: v.string(),
+  storage_id: v.id('_storage'),
+  file_name: v.string(),
+  mime_type: v.string(),
+  size_bytes: v.number(),
+  is_selected: v.boolean(),
+  processing_status: v.union(
+    v.literal('queued'),
+    v.literal('processing'),
+    v.literal('ready'),
+    v.literal('failed'),
+    v.literal('quarantined'),
+  ),
+  security_status: v.union(v.literal('pending'), v.literal('passed'), v.literal('blocked')),
+  security_findings: v.array(
+    v.object({
+      chunk_index: v.number(),
+      category: v.string(),
+      reason: v.string(),
+      content_hash: v.string(),
+      confidence: v.number(),
+    }),
+  ),
+  processing_error: v.optional(v.union(v.string(), v.null())),
+  chunk_count: v.number(),
+  created_at: v.string(),
+  updated_at: v.string(),
+  preview_url: v.union(v.string(), v.null()),
+});
 
-async function requireUserId(
-  ctx: { auth: { getUserIdentity: () => Promise<{ subject: string } | null> } },
-  actionName: string,
-) {
+async function requireUserId(ctx: { auth: { getUserIdentity: () => Promise<{ subject: string } | null> } }, actionName: string) {
   const identity = await ctx.auth.getUserIdentity();
   const userId = identity?.subject;
   if (!userId) {
@@ -30,7 +57,11 @@ async function requireUserId(
 }
 
 async function requireOwnedParent(
-  ctx: { db: { get: (id: Id<'script_chat_sessions'> | Id<'content_items'>) => Promise<any> } },
+  ctx: {
+    db: {
+      get: (id: Id<'script_chat_sessions'> | Id<'content_items'>) => Promise<any>;
+    };
+  },
   id: Id<'script_chat_sessions'> | Id<'content_items'>,
   userId: string,
   actionName: string,
@@ -50,6 +81,7 @@ async function requireOwnedParent(
 
 export const listByParent = query({
   args: { parentId },
+  returns: v.array(attachmentWithPreview),
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx, 'list_chat_attachments');
     await requireOwnedParent(ctx, args.parentId, userId, 'list_chat_attachments');
@@ -57,15 +89,22 @@ export const listByParent = query({
       .query('script_chat_attachments')
       .withIndex('by_parent_id', (q) => q.eq('parent_id', args.parentId))
       .order('asc')
-      .collect();
+      .take(10);
+    const attachmentsWithPreviews = await Promise.all(
+      attachments.map(async (attachment) => ({
+        ...attachment,
+        preview_url: await ctx.storage.getUrl(attachment.storage_id),
+      })),
+    );
     log.debug('Listed chat attachments', {
       userId,
       action: 'list_chat_attachments',
       parentId: args.parentId,
       attachmentCount: attachments.length,
+      previewCount: attachmentsWithPreviews.filter((attachment) => attachment.preview_url !== null).length,
       statusCode: 200,
     });
-    return attachments;
+    return attachmentsWithPreviews;
   },
 });
 
@@ -85,8 +124,58 @@ export const getOwned = query({
   },
 });
 
+export const getReadyContext = query({
+  args: { parentId },
+  returns: v.array(
+    v.object({
+      fileName: v.string(),
+      mimeType: v.string(),
+      content: v.string(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx, 'get_chat_attachment_ready_context');
+    await requireOwnedParent(ctx, args.parentId, userId, 'get_chat_attachment_ready_context');
+    const attachments = await ctx.db
+      .query('script_chat_attachments')
+      .withIndex('by_parent_id', (q) => q.eq('parent_id', args.parentId))
+      .order('desc')
+      .take(10);
+    const readyAttachments = attachments.filter(
+      (attachment) => attachment.is_selected && attachment.processing_status === 'ready' && attachment.security_status === 'passed',
+    );
+    const chunks = await Promise.all(
+      readyAttachments.map(async (attachment) => {
+        const content = await ctx.db
+          .query('script_chat_attachment_chunks')
+          .withIndex('by_attachment_id', (q) => q.eq('attachment_id', attachment._id))
+          .order('asc')
+          .take(20);
+        return content.map((chunk) => ({
+          fileName: attachment.file_name,
+          mimeType: attachment.mime_type,
+          content: chunk.content,
+        }));
+      }),
+    );
+    const result = chunks.flat();
+    log.info('Resolved ready multimodal attachment context', {
+      userId,
+      action: 'get_chat_attachment_ready_context',
+      parentId: args.parentId,
+      attachmentCount: readyAttachments.length,
+      chunkCount: result.length,
+      statusCode: 200,
+    });
+    return result;
+  },
+});
+
 export const setSelected = mutation({
-  args: { attachmentId: v.id('script_chat_attachments'), isSelected: v.boolean() },
+  args: {
+    attachmentId: v.id('script_chat_attachments'),
+    isSelected: v.boolean(),
+  },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx, 'select_chat_attachment');
     const attachment = await ctx.db.get(args.attachmentId);
@@ -193,10 +282,12 @@ export const getMessageAttachmentSearchScope = internalQuery({
     const attachmentIds: Id<'script_chat_attachments'>[] = [];
     for (const reference of message.attachment_refs ?? []) {
       const attachment = await ctx.db.get(reference.attachment_id);
-      if (attachment?.user_id === args.userId
-        && attachment.parent_id === message.session_id
-        && attachment.processing_status === 'ready'
-        && attachment.security_status === 'passed') {
+      if (
+        attachment?.user_id === args.userId &&
+        attachment.parent_id === message.session_id &&
+        attachment.processing_status === 'ready' &&
+        attachment.security_status === 'passed'
+      ) {
         attachmentIds.push(attachment._id);
       }
     }
@@ -253,23 +344,34 @@ export const searchMessageAttachments = action({
 export const hydrateMessageSearchResults = query({
   args: {
     messageId: v.id('script_chat_messages'),
-    results: v.array(v.object({ id: v.id('script_chat_attachment_chunks'), score: v.number() })),
+    results: v.array(
+      v.object({
+        id: v.id('script_chat_attachment_chunks'),
+        score: v.number(),
+      }),
+    ),
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx, 'hydrate_chat_attachment_search_results');
     const message = await ctx.db.get(args.messageId);
     if (!message || message.user_id !== userId) throw new ConvexError('Chat message not found');
     const allowedIds = new Set((message.attachment_refs ?? []).map((reference) => String(reference.attachment_id)));
-    const documents = await Promise.all(args.results.map(async (result) => {
-      const chunk = await ctx.db.get(result.id);
-      if (!chunk || chunk.user_id !== userId || chunk.security_status !== 'passed'
-        || !allowedIds.has(String(chunk.attachment_id))) return null;
-      const attachment = await ctx.db.get(chunk.attachment_id);
-      if (!attachment || attachment.user_id !== userId
-        || attachment.security_status !== 'passed'
-        || attachment.processing_status !== 'ready') return null;
-      return { ...chunk, score: result.score };
-    }));
+    const documents = await Promise.all(
+      args.results.map(async (result) => {
+        const chunk = await ctx.db.get(result.id);
+        if (!chunk || chunk.user_id !== userId || chunk.security_status !== 'passed' || !allowedIds.has(String(chunk.attachment_id)))
+          return null;
+        const attachment = await ctx.db.get(chunk.attachment_id);
+        if (
+          !attachment ||
+          attachment.user_id !== userId ||
+          attachment.security_status !== 'passed' ||
+          attachment.processing_status !== 'ready'
+        )
+          return null;
+        return { ...chunk, score: result.score };
+      }),
+    );
     const safeDocuments = documents.filter((document) => document !== null);
     log.info('Hydrated security-approved attachment search results', {
       userId,

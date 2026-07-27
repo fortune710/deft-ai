@@ -94,7 +94,8 @@
   "devDependencies": {
     "@posthog/cli": "^0.5.25",
     "@trigger.dev/build": "4.5.3",
-    "trigger.dev": "4.5.3"
+    "trigger.dev": "4.5.3",
+    "vitest": "^4.1.10"
   },
   "name": "deft",
   "private": true,
@@ -103,6 +104,8 @@
     "dev": "next dev",
     "lint": "next lint",
     "start": "next start",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "trigger:dev": "trigger dev",
     "trigger:deploy": "trigger deploy",
     "typecheck": "tsc --noEmit"

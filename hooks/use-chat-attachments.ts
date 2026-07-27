@@ -28,6 +28,12 @@ function resolveAttachmentMimeType(file: File, userId: string) {
     '.jpg': 'image/jpeg',
     '.jpeg': 'image/jpeg',
     '.webp': 'image/webp',
+    '.mp3': 'audio/mpeg',
+    '.wav': 'audio/wav',
+    '.m4a': 'audio/mp4',
+    '.mp4': 'video/mp4',
+    '.webm': 'video/webm',
+    '.mov': 'video/quicktime',
   };
   const mimeType = file.type || fallbackByExtension[extension] || 'application/octet-stream';
   log.debug('Resolved chat attachment MIME type', {
@@ -39,7 +45,7 @@ function resolveAttachmentMimeType(file: File, userId: string) {
   return mimeType;
 }
 
-function toChatAttachment(document: Doc<'script_chat_attachments'>, userId: string): ChatAttachment {
+function toChatAttachment(document: Doc<'script_chat_attachments'> & { preview_url?: string | null }, userId: string): ChatAttachment {
   log.debug('Mapped Convex chat attachment', {
     userId,
     action: 'map_chat_attachment',
@@ -64,6 +70,7 @@ function toChatAttachment(document: Doc<'script_chat_attachments'>, userId: stri
       confidence: finding.confidence,
     })),
     processingError: document.processing_error ?? undefined,
+    previewUrl: document.preview_url ?? undefined,
     chunkCount: document.chunk_count,
     createdAt: document.created_at,
     updatedAt: document.updated_at,
@@ -73,18 +80,15 @@ function toChatAttachment(document: Doc<'script_chat_attachments'>, userId: stri
 export function validateChatAttachmentFile(file: File, currentCount: number, userId = 'unknown') {
   const extension = `.${file.name.split('.').pop()?.toLowerCase() ?? ''}`;
   const mimeType = resolveAttachmentMimeType(file, userId);
-  const allowedMime = CHAT_ATTACHMENT_ALLOWED_MIME_TYPES.includes(
-    mimeType as (typeof CHAT_ATTACHMENT_ALLOWED_MIME_TYPES)[number],
-  );
-  const allowedExtension = CHAT_ATTACHMENT_ALLOWED_EXTENSIONS.includes(
-    extension as (typeof CHAT_ATTACHMENT_ALLOWED_EXTENSIONS)[number],
-  );
+  const allowedMime = CHAT_ATTACHMENT_ALLOWED_MIME_TYPES.includes(mimeType as (typeof CHAT_ATTACHMENT_ALLOWED_MIME_TYPES)[number]);
+  const allowedExtension = CHAT_ATTACHMENT_ALLOWED_EXTENSIONS.includes(extension as (typeof CHAT_ATTACHMENT_ALLOWED_EXTENSIONS)[number]);
   const extensionMimeMatches = resolveAttachmentMimeType(new File([], file.name), userId) === mimeType;
   let error: string | null = null;
   if (currentCount >= CHAT_ATTACHMENT_MAX_FILES) error = `A chat can contain at most ${CHAT_ATTACHMENT_MAX_FILES} files`;
   else if (file.size <= 0) error = 'The selected file is empty';
-  else if (file.size > CHAT_ATTACHMENT_MAX_BYTES) error = 'Each file must be 10 MB or smaller';
-  else if (!allowedMime || !allowedExtension || !extensionMimeMatches) error = 'The file extension and type do not match a supported format';
+  else if (file.size > CHAT_ATTACHMENT_MAX_BYTES) error = 'Each file must be 50 MB or smaller';
+  else if (!allowedMime || !allowedExtension || !extensionMimeMatches)
+    error = 'The file extension and type do not match a supported format';
   log.debug('Validated chat attachment before upload', {
     userId,
     action: 'validate_chat_attachment_upload',
@@ -123,10 +127,7 @@ async function startProcessing(attachmentId: string, userId: string) {
 
 export function useChatAttachments(parentId: string) {
   const { userId } = useAuth();
-  const documents = useQuery(
-    api.scriptChatAttachments.listByParent,
-    userId && parentId ? { parentId: parentId as ParentId } : 'skip',
-  );
+  const documents = useQuery(api.scriptChatAttachments.listByParent, userId && parentId ? { parentId: parentId as ParentId } : 'skip');
   log.debug('Resolved chat attachments', {
     userId: userId || 'signed_out',
     action: 'list_chat_attachments',
@@ -166,7 +167,7 @@ export function useUploadChatAttachments(parentId: string, currentCount: number)
           method: 'POST',
           body: formData,
         });
-        const body = await uploadResponse.json().catch(() => ({})) as Partial<Doc<'script_chat_attachments'>> & { error?: string };
+        const body = (await uploadResponse.json().catch(() => ({}))) as Partial<Doc<'script_chat_attachments'>> & { error?: string };
         if (!uploadResponse.ok) {
           log.error('Attachment upload API rejected the file', {
             userId: effectiveUserId,
@@ -200,19 +201,18 @@ export function useUploadChatAttachments(parentId: string, currentCount: number)
 
 export function useSelectChatAttachment() {
   const { userId } = useAuth();
-  const setSelected = useMutation(api.scriptChatAttachments.setSelected)
-    .withOptimisticUpdate((store, args) => {
-      for (const queryResult of store.getAllQueries(api.scriptChatAttachments.listByParent)) {
-        if (!queryResult.value) continue;
-        store.setQuery(
-          api.scriptChatAttachments.listByParent,
-          queryResult.args,
-          queryResult.value.map((attachment) => attachment._id === args.attachmentId
-            ? { ...attachment, is_selected: args.isSelected }
-            : attachment),
-        );
-      }
-    });
+  const setSelected = useMutation(api.scriptChatAttachments.setSelected).withOptimisticUpdate((store, args) => {
+    for (const queryResult of store.getAllQueries(api.scriptChatAttachments.listByParent)) {
+      if (!queryResult.value) continue;
+      store.setQuery(
+        api.scriptChatAttachments.listByParent,
+        queryResult.args,
+        queryResult.value.map((attachment) =>
+          attachment._id === args.attachmentId ? { ...attachment, is_selected: args.isSelected } : attachment,
+        ),
+      );
+    }
+  });
   return useAsyncMutation({
     mutationFn: async ({ attachmentId, isSelected }: { attachmentId: string; isSelected: boolean }) => {
       log.info('Changing chat attachment selection', {
@@ -231,17 +231,16 @@ export function useSelectChatAttachment() {
 
 export function useRemoveChatAttachment() {
   const { userId } = useAuth();
-  const remove = useMutation(api.scriptChatAttachments.remove)
-    .withOptimisticUpdate((store, args) => {
-      for (const queryResult of store.getAllQueries(api.scriptChatAttachments.listByParent)) {
-        if (!queryResult.value) continue;
-        store.setQuery(
-          api.scriptChatAttachments.listByParent,
-          queryResult.args,
-          queryResult.value.filter((attachment) => attachment._id !== args.attachmentId),
-        );
-      }
-    });
+  const remove = useMutation(api.scriptChatAttachments.remove).withOptimisticUpdate((store, args) => {
+    for (const queryResult of store.getAllQueries(api.scriptChatAttachments.listByParent)) {
+      if (!queryResult.value) continue;
+      store.setQuery(
+        api.scriptChatAttachments.listByParent,
+        queryResult.args,
+        queryResult.value.filter((attachment) => attachment._id !== args.attachmentId),
+      );
+    }
+  });
   return useAsyncMutation({
     mutationFn: async (attachmentId: string) => {
       log.info('Removing chat attachment', {
@@ -249,7 +248,9 @@ export function useRemoveChatAttachment() {
         action: 'remove_chat_attachment',
         attachmentId,
       });
-      return await remove({ attachmentId: attachmentId as Id<'script_chat_attachments'> });
+      return await remove({
+        attachmentId: attachmentId as Id<'script_chat_attachments'>,
+      });
     },
   });
 }
@@ -261,7 +262,9 @@ export function useRetryChatAttachment() {
   return useAsyncMutation({
     mutationFn: async (attachmentId: string) => {
       const effectiveUserId = userId || 'unknown';
-      await retry({ attachmentId: attachmentId as Id<'script_chat_attachments'> });
+      await retry({
+        attachmentId: attachmentId as Id<'script_chat_attachments'>,
+      });
       try {
         await startProcessing(attachmentId, effectiveUserId);
       } catch (error) {

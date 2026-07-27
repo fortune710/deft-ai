@@ -196,7 +196,16 @@ export async function generateAttachmentAwareEdit(
   const agent = createReactAgent({
     llm: model,
     tools: [searchTool],
-    prompt: `${buildAgentPrompt(input, 'edit')}\nProduce concrete edit proposals. For complete rewrites, return the entire updated Markdown in the after field.`,
+    prompt: `${buildAgentPrompt(input, 'edit')}
+
+EDIT PROPOSAL CONTRACT:
+- Produce one localized proposal for each distinct change.
+- In every proposal, before MUST be an exact, contiguous substring copied verbatim from CURRENT SCRIPT.
+- after MUST contain only the replacement for that exact substring, never the entire script.
+- Keep each proposal narrowly scoped to a paragraph, sentence, hook, or CTA.
+- Never use the whole script as before or after.
+- When several parts need changes, return several independent proposals so each can be accepted or rejected separately.
+- File evidence may inform the replacement text, but it does not change these range requirements.`,
     responseFormat: editProposalSchema,
   });
   const result = await agent.invoke({ messages: agentMessages(input) }, { recursionLimit: 6 });
