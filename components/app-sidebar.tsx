@@ -49,7 +49,7 @@ export const navItems: NavItem[] = [
   },
   {
     title: 'Script Creator',
-    href: '/script-creator',
+    href: '/scripts',
     icon: FileText,
     visible: false, // Only visible in development
   },
