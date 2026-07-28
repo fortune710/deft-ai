@@ -703,6 +703,27 @@ export function ScriptIntakeInput({
     });
   };
 
+  const handlePromptKeyDown = (
+    event: React.KeyboardEvent<HTMLTextAreaElement>,
+  ) => {
+    if (
+      event.key !== "Enter" ||
+      event.shiftKey ||
+      event.nativeEvent.isComposing
+    ) {
+      return;
+    }
+    event.preventDefault();
+    log.debug("Handled Enter key in the script intake textarea", {
+      userId: userId || "signed_out",
+      action: "submit_script_intake_brief_with_enter",
+      canSubmit: Boolean(
+        value.trim() && !isSubmitting && !isProcessingSources,
+      ),
+    });
+    handleSubmit();
+  };
+
   const updateSourceTrayOverflow = React.useCallback(() => {
     const tray = sourceTrayRef.current;
     if (!tray) return;
@@ -970,6 +991,7 @@ export function ScriptIntakeInput({
           <Textarea
             value={value}
             onChange={(event) => onChange(event.target.value)}
+            onKeyDown={handlePromptKeyDown}
             onPaste={handlePromptPaste}
             placeholder="What would you like to create?"
             className="min-h-[116px] w-full resize-none border-0 bg-transparent p-0 text-base text-foreground shadow-none outline-none placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 md:text-lg"

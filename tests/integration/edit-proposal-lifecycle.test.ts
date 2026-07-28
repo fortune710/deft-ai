@@ -4,6 +4,7 @@ import {
   anchorEditProposalsToCurrentContent,
   applyEditProposalToContent,
   createSuggestionMarkup,
+  locateProposalSourceText,
   materializeSuggestionsForGeneration,
   rejectEditProposalInContent,
   resolveEditProposalStatus,
@@ -165,5 +166,93 @@ describe("independent script edit proposal lifecycle", () => {
       content: originalScript,
       reason: "scope_too_broad",
     });
+  });
+
+  it("matches rendered whitespace with regex and preserves surrounding content", () => {
+    const originalScript = [
+      "# Keep this title",
+      "",
+      "The middle sentence",
+      "wraps onto another line.",
+      "",
+      "Keep this final paragraph exactly as written.",
+    ].join("\n");
+    const proposal: EditProposal = {
+      section: "markdown",
+      before: "The middle sentence wraps onto another line.",
+      after: "The revised middle sentence remains localized.",
+      description: "Revise only the middle sentence.",
+    };
+
+    const match = locateProposalSourceText(
+      originalScript,
+      proposal.before,
+      "test-user",
+    );
+    expect(match).toMatchObject({
+      strategy: "flexible_whitespace",
+      text: "The middle sentence\nwraps onto another line.",
+    });
+
+    const result = applyEditProposalToContent(
+      originalScript,
+      proposal,
+      "test-user",
+    );
+    expect(result.applied).toBe(true);
+    expect(result.content).toBe([
+      "# Keep this title",
+      "",
+      "The revised middle sentence remains localized.",
+      "",
+      "Keep this final paragraph exactly as written.",
+    ].join("\n"));
+  });
+
+  it("decomposes broad rewrites into non-overlapping suggestions", () => {
+    const originalScript =
+      "Opening paragraph.\n\nMiddle paragraph.\n\nClosing paragraph.";
+    const documentProposal: EditProposal = {
+      section: "fullScript",
+      scope: "document",
+      before: originalScript,
+      after:
+        "Condensed opening and context.\n\nFocused conclusion and CTA.",
+      description: "Condense the complete script to two paragraphs.",
+    };
+    const openingProposal: EditProposal = {
+      section: "Opening",
+      scope: "paragraph",
+      before: "Opening paragraph.",
+      after: "Condensed opening and context.",
+      description: "Condense the opening.",
+    };
+    const closingProposal: EditProposal = {
+      section: "Closing",
+      scope: "paragraph",
+      before: "Closing paragraph.",
+      after: "Focused conclusion and CTA.",
+      description: "Strengthen the close.",
+    };
+    const overlappingProposal: EditProposal = {
+      section: "Opening",
+      scope: "sentence",
+      before: "Opening paragraph.",
+      after: "A duplicate opening replacement.",
+      description: "This range overlaps the first suggestion.",
+    };
+
+    expect(
+      anchorEditProposalsToCurrentContent(
+        [
+          documentProposal,
+          openingProposal,
+          overlappingProposal,
+          closingProposal,
+        ],
+        originalScript,
+        "test-user",
+      ),
+    ).toEqual([openingProposal, closingProposal]);
   });
 });

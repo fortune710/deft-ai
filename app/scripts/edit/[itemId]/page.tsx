@@ -6,17 +6,17 @@ import {
   useUpdateItemContent,
 } from "@/hooks/use-content-items";
 import {
-  useResolveEditProposal,
   useSessionMessages,
 } from "@/hooks/use-script-chats";
 import {
   MdxScriptEditor,
   MdxScriptEditorRef,
+  type ScriptSuggestionHighlight,
 } from "@/components/editor/mdx-script-editor";
 import { ChatPanel } from "@/components/editor/chat-panel";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Loader2, PanelRight } from "lucide-react";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { contentToMarkdown } from "@/lib/utils/script-markdown";
 import {
   ResizableHandle,
@@ -35,7 +35,8 @@ import {
 } from "@/components/ui/breadcrumb";
 import { logger } from "@/lib/logger";
 import { useAuth } from "@/hooks/use-clerk-auth";
-import type { EditProposal } from "@/types/script-chat";
+import type { EditorContent } from "@/types/script-chat";
+import { materializeSuggestionsForGeneration } from "@/lib/script-editing/proposals";
 
 const log = logger.child({ file: "app/scripts/edit/[itemId]/page.tsx" });
 
@@ -48,16 +49,37 @@ export default function EditContentPage() {
   const { data: contentItem, isLoading: itemLoading } = useContentItem(itemId);
   const { data: messages } = useSessionMessages(itemId);
   const updateItemContent = useUpdateItemContent();
-  const resolveProposal = useResolveEditProposal();
   const editorRef = useRef<MdxScriptEditorRef>(null);
   const chatPanelRef = useRef<ImperativePanelHandle>(null);
   const collapseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const highlightedMessageIdsRef = useRef<Set<string>>(new Set());
   const shouldReduceMotion = useReducedMotion();
 
   const [initialMarkdown, setInitialMarkdown] = useState<string | null>(null);
   const [currentMarkdown, setCurrentMarkdown] = useState<string | null>(null);
   const [showChat, setShowChat] = useState(true);
+  const pendingSuggestions = useMemo<ScriptSuggestionHighlight[]>(() => {
+    const suggestions = (messages ?? []).flatMap((message) => {
+      if (
+        message.role !== "assistant" ||
+        message.message_type !== "edit" ||
+        !message.proposed_changes?.length
+      ) {
+        return [];
+      }
+      return message.proposed_changes.flatMap((proposal, proposalIndex) =>
+        (proposal.status ?? message.change_status ?? "pending") === "pending"
+          ? [{ messageId: message.id, proposalIndex, proposal }]
+          : [],
+      );
+    });
+    log.debug("Collected pending editor suggestion highlights", {
+      action: "collect_pending_script_suggestion_highlights",
+      userId: userId || "signed_out",
+      itemId,
+      suggestionCount: suggestions.length,
+    });
+    return suggestions;
+  }, [itemId, messages, userId]);
 
   log.debug("Rendering content editor", {
     action: "render_content_editor",
@@ -181,8 +203,12 @@ export default function EditContentPage() {
 
   useEffect(() => {
     if (contentItem && initialMarkdown === null) {
-      const markdown =
+      const storedMarkdown =
         contentItem.script_content || contentToMarkdown(contentItem.content);
+      const markdown = materializeSuggestionsForGeneration(
+        storedMarkdown,
+        userId || "signed_out",
+      );
       setInitialMarkdown(markdown);
       setCurrentMarkdown(markdown);
       log.info("Initialized the live script editor snapshot", {
@@ -190,130 +216,10 @@ export default function EditContentPage() {
         userId: userId || "signed_out",
         itemId,
         markdownLength: markdown.length,
+        removedLegacySuggestionMarkup: markdown !== storedMarkdown,
       });
     }
   }, [contentItem, initialMarkdown, itemId, userId]);
-
-  useEffect(() => {
-    const handleHighlightedProposalResolution = (
-      event: Event,
-    ) => {
-      const detail = (
-        event as CustomEvent<{
-          messageId: string;
-          proposalIndex: number;
-          status: "accepted" | "rejected";
-        }>
-      ).detail;
-      if (
-        !detail?.messageId ||
-        !Number.isInteger(detail.proposalIndex) ||
-        !["accepted", "rejected"].includes(detail.status)
-      ) {
-        log.warn("Ignored an invalid highlighted proposal resolution event", {
-          action: "resolve_highlighted_script_proposal",
-          userId: userId || "signed_out",
-          itemId,
-          error: "Invalid proposal resolution event",
-        });
-        return;
-      }
-
-      const markdown = editorRef.current?.getMarkdown() ?? currentMarkdown ?? "";
-      setCurrentMarkdown(markdown);
-      updateItemContent.mutate({
-        itemId,
-        content: markdown as any,
-      });
-      void resolveProposal.mutateAsync({
-        messageId: detail.messageId,
-        proposalIndex: detail.proposalIndex,
-        status: detail.status,
-        sessionId: itemId,
-      }).then(() => {
-        log.info("Resolved a suggestion from its editor highlight", {
-          action: "resolve_highlighted_script_proposal",
-          userId: userId || "signed_out",
-          itemId,
-          messageId: detail.messageId,
-          proposalIndex: detail.proposalIndex,
-          status: detail.status,
-        });
-      }).catch((error) => {
-        log.error("Failed to persist a highlighted proposal resolution", {
-          action: "resolve_highlighted_script_proposal",
-          userId: userId || "signed_out",
-          itemId,
-          messageId: detail.messageId,
-          proposalIndex: detail.proposalIndex,
-          status: detail.status,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      });
-    };
-
-    window.addEventListener(
-      "proposal-resolved",
-      handleHighlightedProposalResolution,
-    );
-    log.debug("Registered highlighted proposal resolution listener", {
-      action: "register_highlighted_proposal_resolution_listener",
-      userId: userId || "signed_out",
-      itemId,
-    });
-    return () => {
-      window.removeEventListener(
-        "proposal-resolved",
-        handleHighlightedProposalResolution,
-      );
-      log.debug("Removed highlighted proposal resolution listener", {
-        action: "remove_highlighted_proposal_resolution_listener",
-        userId: userId || "signed_out",
-        itemId,
-      });
-    };
-  }, [
-    currentMarkdown,
-    itemId,
-    resolveProposal,
-    updateItemContent,
-    userId,
-  ]);
-
-  useEffect(() => {
-    if (!currentMarkdown || !editorRef.current) return;
-    for (const message of messages ?? []) {
-      if (
-        message.role !== "assistant" ||
-        message.message_type !== "edit" ||
-        message.change_status !== "pending" ||
-        !message.proposed_changes?.length ||
-        highlightedMessageIdsRef.current.has(message.id)
-      ) {
-        continue;
-      }
-      const result = editorRef.current.applyProposals(
-        message.proposed_changes,
-        message.id,
-      );
-      highlightedMessageIdsRef.current.add(message.id);
-      if (result.appliedIndices.length) {
-        setCurrentMarkdown(result.markdown);
-        updateItemContent.mutate({
-          itemId,
-          content: result.markdown as any,
-        });
-      }
-      log.info("Restored pending suggestion highlights in the script editor", {
-        action: "restore_pending_script_suggestion_highlights",
-        userId: userId || "signed_out",
-        itemId,
-        messageId: message.id,
-        proposalCount: message.proposed_changes.length,
-        highlightedProposalCount: result.appliedIndices.length,
-      });
-    }
-  }, [currentMarkdown, itemId, messages, updateItemContent, userId]);
 
   const handleManualMarkdownChange = (newMarkdown: string) => {
     setCurrentMarkdown(newMarkdown);
@@ -329,36 +235,20 @@ export default function EditContentPage() {
     });
   };
 
-  const handleAIContentUpdate = (newMarkdown: string) => {
+  const handleAIContentUpdate = (
+    updatedContent: EditorContent | string,
+  ) => {
+    const newMarkdown =
+      typeof updatedContent === "string"
+        ? updatedContent
+        : updatedContent.fullScript;
     editorRef.current?.setMarkdown(newMarkdown);
     handleManualMarkdownChange(newMarkdown);
-  };
-
-  const handleProposalsGenerated = (
-    proposals: EditProposal[],
-    messageId: string,
-  ) => {
-    const result = editorRef.current?.applyProposals(proposals, messageId);
-    if (!result) {
-      log.warn("Could not access the editor to highlight generated proposals", {
-        action: "highlight_generated_script_proposals",
-        userId: userId || "signed_out",
-        itemId,
-        messageId,
-        proposalCount: proposals.length,
-      });
-      return;
-    }
-    highlightedMessageIdsRef.current.add(messageId);
-    handleManualMarkdownChange(result.markdown);
-    log.info("Inserted generated suggestions at exact script ranges", {
-      action: "highlight_generated_script_proposals",
+    log.info("Applied an assistant update while preserving the script document", {
+      action: "apply_assistant_script_content_update",
       userId: userId || "signed_out",
       itemId,
-      messageId,
-      proposalCount: proposals.length,
-      highlightedProposalCount: result.appliedIndices.length,
-      highlightedProposalIndices: result.appliedIndices,
+      markdownLength: newMarkdown.length,
     });
   };
 
@@ -397,13 +287,13 @@ export default function EditContentPage() {
       <header className="border-b px-6 py-3 flex items-center justify-between shrink-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-10 sticky top-0">
         <div className="flex items-center gap-4">
           <Breadcrumb>
-            <BreadcrumbList>
+            <BreadcrumbList className="[font-family:var(--inter)]">
               <BreadcrumbItem>
                 <BreadcrumbLink
                   href="/content-engine"
                   className="text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  Content Engine
+                  Content Ideas
                 </BreadcrumbLink>
               </BreadcrumbItem>
               <BreadcrumbSeparator />
@@ -444,6 +334,7 @@ export default function EditContentPage() {
               onChange={handleManualMarkdownChange}
               isSaving={updateItemContent.isPending}
               userId={userId || "signed_out"}
+              suggestions={pendingSuggestions}
             />
           </ResizablePanel>
 
@@ -487,7 +378,6 @@ export default function EditContentPage() {
                 editorContent={currentMarkdown}
                 onClose={handleChatClose}
                 onContentUpdate={handleAIContentUpdate}
-                onProposalsGenerated={handleProposalsGenerated}
                 showHeader={false}
               />
             </motion.div>

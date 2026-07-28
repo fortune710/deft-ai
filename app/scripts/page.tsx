@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
   ArrowDownUp,
+  CalendarDays,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -28,12 +29,23 @@ import {
   Trash2,
 } from "lucide-react";
 import { useContentProfile } from "@/hooks/use-content-profile";
-import { useChatSessions, useDeleteSession } from "@/hooks/use-script-chats";
+import {
+  useChatSessions,
+  useDeleteSession,
+  useUpdateSessionScheduleDate,
+} from "@/hooks/use-script-chats";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { format, parseISO } from "date-fns";
 import { FilmScriptFill } from "@/components/icons/script";
 import { logger } from "@/lib/logger";
 import { useAuth } from "@/hooks/use-clerk-auth";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Table,
   TableBody,
@@ -87,12 +99,81 @@ const scriptDurationLabels: Record<ScriptDuration, string> = {
   long: "Long",
 };
 
+interface ScheduleDatePickerProps {
+  sessionId: string;
+  scheduledDate: string;
+  userId: string;
+  onDateChange: (sessionId: string, date: Date) => void;
+}
+
+function ScheduleDatePicker({
+  sessionId,
+  scheduledDate,
+  userId,
+  onDateChange,
+}: ScheduleDatePickerProps) {
+  const [open, setOpen] = useState(false);
+  const selectedDate = parseISO(scheduledDate);
+
+  log.debug("Rendering script schedule date picker", {
+    userId,
+    action: "render_script_schedule_date_picker",
+    sessionId,
+    scheduledDate,
+  });
+
+  const handleDateSelect = (date: Date | undefined) => {
+    if (!date) return;
+    log.info("Selected a new script schedule date", {
+      userId,
+      action: "select_script_schedule_date",
+      sessionId,
+      scheduledDate: format(date, "yyyy-MM-dd"),
+    });
+    onDateChange(sessionId, date);
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1.5 rounded-xl px-2 text-xs font-normal text-muted-foreground transition-[background-color,color,border-radius] hover:rounded-xl hover:bg-muted hover:text-foreground data-[state=open]:bg-muted data-[state=open]:text-foreground"
+          aria-label={`Change schedule date from ${format(selectedDate, "MMMM d, yyyy")}`}
+        >
+          <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />
+          {format(selectedDate, "MMM d, yyyy")}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-auto rounded-xl p-0 shadow-panel"
+        align="start"
+        sideOffset={4}
+      >
+        <Calendar
+          mode="single"
+          selected={selectedDate}
+          onSelect={handleDateSelect}
+          classNames={{
+            day_selected:
+              "border-transparent bg-primary text-primary-foreground ring-0 hover:bg-primary hover:text-primary-foreground focus:border-transparent focus:bg-primary focus:text-primary-foreground focus-visible:!border-transparent focus-visible:!ring-0",
+          }}
+          initialFocus
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export default function ScriptCreatorPage() {
   const { userId } = useAuth();
   const router = useRouter();
   const { profile, isLoading: profileLoading } = useContentProfile();
   const { data: scripts, isLoading: scriptsLoading } = useChatSessions();
   const deleteScript = useDeleteSession();
+  const updateScheduleDate = useUpdateSessionScheduleDate();
   const [searchQuery, setSearchQuery] = useState("");
   const [platformFilter, setPlatformFilter] = useState<Platform | "all">("all");
   const [durationFilter, setDurationFilter] = useState<
@@ -103,6 +184,41 @@ export default function ScriptCreatorPage() {
   );
   const [page, setPage] = useState(1);
   const pageSize = 10;
+
+  const handleScheduleDateChange = (sessionId: string, date: Date) => {
+    const scheduledDate = format(date, "yyyy-MM-dd");
+    log.info("Updating a script schedule date from the scripts table", {
+      userId: userId || "signed_out",
+      action: "update_script_schedule_date_from_table",
+      sessionId,
+      scheduledDate,
+    });
+    updateScheduleDate.mutate(
+      { sessionId, scheduledDate },
+      {
+        onSuccess: () => {
+          log.info("Updated a script schedule date from the scripts table", {
+            userId: userId || "signed_out",
+            action: "update_script_schedule_date_from_table",
+            sessionId,
+            scheduledDate,
+            statusCode: 200,
+          });
+          toast.success("Schedule date updated");
+        },
+        onError: (error) => {
+          log.error("Failed to update a script schedule date from the table", {
+            userId: userId || "signed_out",
+            action: "update_script_schedule_date_from_table",
+            sessionId,
+            scheduledDate,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          toast.error("Failed to update schedule date");
+        },
+      },
+    );
+  };
 
   const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase();
   const filteredScripts = scripts
@@ -257,10 +373,10 @@ export default function ScriptCreatorPage() {
   return (
     <AppLayout>
       <div className="-m-6 flex min-h-screen flex-col overflow-hidden border-x border-border/70 bg-background">
-        <header className="flex min-h-16 items-center justify-between gap-3 border-b border-border/70 px-5 py-2">
+        <header className="flex min-h-16 items-center justify-between gap-3 border-b border-border/70 px-5 py-3">
           <div className="flex items-center gap-2">
-            <h1 className="font-alan-sans text-base font-semibold tracking-tight text-foreground">
-              Your Script
+            <h1 className="font-inter text-sm font-medium tracking-wide leading-6 text-foreground">
+              Scripts
             </h1>
             <Info
               className="h-3.5 w-3.5 text-muted-foreground"
@@ -420,17 +536,20 @@ export default function ScriptCreatorPage() {
         </div>
 
         <div className="flex-1 overflow-x-auto">
-          <Table className="min-w-[760px]">
+          <Table className="min-w-[900px]">
             <TableHeader className="bg-muted/20 ">
               <TableRow className="hover:bg-transparent">
-                <TableHead className="w-[38%] px-5 text-xs font-medium">
+                <TableHead className="w-[32%] px-5 text-xs font-medium">
                   Title
                 </TableHead>
-                <TableHead className="w-[20%] px-2 text-xs font-medium">
+                <TableHead className="w-[18%] px-2 text-xs font-medium">
                   Platform
                 </TableHead>
-                <TableHead className="w-[17%] px-2 text-xs font-medium">
+                <TableHead className="w-[13%] px-2 text-xs font-medium">
                   Duration
+                </TableHead>
+                <TableHead className="w-[16%] px-2 text-xs font-medium">
+                  Schedule Date
                 </TableHead>
                 <TableHead className="px-2 text-xs font-medium">
                   Last Updated
@@ -507,6 +626,14 @@ export default function ScriptCreatorPage() {
                           ? scriptDurationLabels[durationPreset]
                           : script.editor_content.estimatedDuration || "—"}
                       </TableCell>
+                      <TableCell className="whitespace-nowrap px-1 py-1">
+                        <ScheduleDatePicker
+                          sessionId={script.id}
+                          scheduledDate={script.scheduled_date}
+                          userId={userId || "signed_out"}
+                          onDateChange={handleScheduleDateChange}
+                        />
+                      </TableCell>
                       <TableCell className="whitespace-nowrap px-3 py-1.5 text-xs text-muted-foreground">
                         {new Date(script.updated_at).toLocaleDateString(
                           undefined,
@@ -562,7 +689,7 @@ export default function ScriptCreatorPage() {
                 })
               ) : (
                 <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={5} className="h-56 text-center">
+                  <TableCell colSpan={6} className="h-56 text-center">
                     <FilmScriptFill
                       className="mx-auto mb-3 h-8 w-8 text-muted-foreground/50"
                       aria-hidden="true"

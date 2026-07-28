@@ -108,6 +108,7 @@ export default defineSchema({
     user_id: v.string(),
     title: v.string(),
     editor_content: v.any(),
+    scheduled_date: nullable(v.string()),
     created_at: nullable(v.string()),
     updated_at: nullable(v.string()),
   })

@@ -48,6 +48,7 @@ export function ChatPanel({
   const { data: attachments } = useChatAttachments(sessionId);
   const hasBlockingAttachments = attachments.some((attachment) => attachment.isSelected
     && (attachment.processingStatus === 'queued' || attachment.processingStatus === 'processing'));
+  const latestMessageId = messages.at(-1)?.id ?? null;
 
   log.debug('Rendering script chat panel', {
     action: 'render_script_chat_panel',
@@ -57,8 +58,15 @@ export function ChatPanel({
   });
 
   useEffect(() => {
+    if (!latestMessageId) return;
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    log.debug('Scrolled the assistant panel for a newly appended message', {
+      action: 'scroll_script_chat_to_latest_message',
+      userId: userId || 'signed_out',
+      sessionId,
+      latestMessageId,
+    });
+  }, [latestMessageId, sessionId, userId]);
 
   const handleSend = async () => {
     if (!input.trim() || isGenerating) return;
@@ -189,7 +197,7 @@ export function ChatPanel({
         </div>
       )}
 
-      <div className="flex-1 overflow-auto px-4 py-4 space-y-4 custom-scrollbar pb-4">
+      <div className="custom-scrollbar flex-1 space-y-4 overflow-auto px-4 pb-1 pt-4">
         {messages.length === 0 ? (
           <div className="text-center text-muted-foreground text-sm py-8">
             <p className="mb-2">Start a conversation</p>

@@ -613,7 +613,7 @@ export default function NewScriptPage() {
     <AppLayout>
       <div className="-mx-6 -mt-6 border-b px-6 py-5">
         <Breadcrumb>
-          <BreadcrumbList className="text-base">
+          <BreadcrumbList className="text-base [font-family:var(--inter)]">
             <BreadcrumbItem>
               <BreadcrumbLink
                 href="/scripts"

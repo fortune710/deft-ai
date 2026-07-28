@@ -17,11 +17,22 @@ const log = logger.child({ module: 'hooks/use-script-chats' });
 type ChatParentId = Id<'script_chat_sessions'> | Id<'content_items'>;
 
 function toChatSession(document: Doc<'script_chat_sessions'>): ChatSession {
+  const scheduledDate = document.scheduled_date
+    ?? document.created_at
+    ?? new Date(document._creationTime).toISOString();
+  log.debug('Mapped Convex script chat session', {
+    userId: document.user_id,
+    action: 'map_script_chat_session',
+    sessionId: document._id,
+    scheduledDate,
+  });
+
   return {
     id: document._id,
     user_id: document.user_id,
     title: document.title,
     editor_content: document.editor_content as EditorContent,
+    scheduled_date: scheduledDate,
     created_at: document.created_at ?? new Date(document._creationTime).toISOString(),
     updated_at: document.updated_at ?? new Date(document._creationTime).toISOString(),
   };
@@ -193,6 +204,88 @@ export function useUpdateSessionTitle() {
   return useAsyncMutation({
     mutationFn: ({ sessionId, title }: { sessionId: string; title: string }) =>
       updateSessionTitle({ sessionId: sessionId as Id<'script_chat_sessions'>, title }),
+  });
+}
+
+export function useUpdateSessionScheduleDate() {
+  const { userId } = useAuth();
+  const updateSessionScheduleDate = useConvexMutation(
+    api.scriptChats.updateSessionScheduleDate,
+  ).withOptimisticUpdate((localStore, args) => {
+    const updatedAt = new Date().toISOString();
+    const sessions = localStore.getQuery(api.scriptChats.listSessions, {});
+    log.debug('Applying optimistic script schedule date update', {
+      userId: userId || 'signed_out',
+      action: 'optimistically_update_script_schedule_date',
+      sessionId: args.sessionId,
+      scheduledDate: args.scheduledDate,
+    });
+    if (sessions) {
+      localStore.setQuery(
+        api.scriptChats.listSessions,
+        {},
+        sessions.map((session) => session._id === args.sessionId
+          ? {
+              ...session,
+              scheduled_date: args.scheduledDate,
+              updated_at: updatedAt,
+            }
+          : session),
+      );
+    }
+
+    const session = localStore.getQuery(api.scriptChats.getSession, {
+      sessionId: args.sessionId,
+    });
+    if (session) {
+      localStore.setQuery(
+        api.scriptChats.getSession,
+        { sessionId: args.sessionId },
+        {
+          ...session,
+          scheduled_date: args.scheduledDate,
+          updated_at: updatedAt,
+        },
+      );
+    }
+  });
+  log.debug('Prepared optimistic Convex schedule date update', {
+    userId: userId || 'signed_out',
+    action: 'prepare_update_script_schedule_date',
+  });
+
+  return useAsyncMutation({
+    mutationFn: async ({
+      sessionId,
+      scheduledDate,
+    }: {
+      sessionId: string;
+      scheduledDate: string;
+    }) => {
+      try {
+        const updatedSession = await updateSessionScheduleDate({
+          sessionId: sessionId as Id<'script_chat_sessions'>,
+          scheduledDate,
+        });
+        log.info('Updated Convex script schedule date', {
+          userId: userId || 'unknown',
+          action: 'update_script_schedule_date',
+          sessionId,
+          scheduledDate,
+          statusCode: 200,
+        });
+        return updatedSession;
+      } catch (error) {
+        log.error('Failed to update Convex script schedule date', {
+          userId: userId || 'unknown',
+          action: 'update_script_schedule_date',
+          sessionId,
+          scheduledDate,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
+    },
   });
 }
 

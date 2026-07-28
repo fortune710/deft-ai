@@ -20,6 +20,16 @@ const config: Config = {
 			},
 			fontFamily: {
 				'alan-sans': ['var(--alan-sans)', 'sans-serif'],
+				'inter': [
+					'var(--inter)',
+					'Inter',
+					'ui-sans-serif',
+					'system-ui',
+					'-apple-system',
+					'BlinkMacSystemFont',
+					'"Segoe UI"',
+					'sans-serif',
+				],
 				'lexend-deca': ['var(--lexend-deca)', 'serif'],
 			},
 			colors: {

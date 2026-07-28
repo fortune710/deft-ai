@@ -62,6 +62,7 @@ export interface EditProposal {
   before: string;
   after: string;
   description: string;
+  scope?: "sentence" | "paragraph" | "section" | "document";
   status?: ChangeStatus;
 }
 
@@ -83,6 +84,7 @@ export interface ChatSession {
   user_id: string;
   title: string;
   editor_content: EditorContent;
+  scheduled_date: string;
   created_at: string;
   updated_at: string;
 }

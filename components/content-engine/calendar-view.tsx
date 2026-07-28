@@ -13,6 +13,10 @@ import {
 } from '@/components/ui/popover';
 import { ContentItemDialog } from './content-item-dialog';
 import type { ContentItem, Platform } from '@/types/content-engine';
+import { logger } from '@/lib/logger';
+import { useAuth } from '@/hooks/use-clerk-auth';
+
+const log = logger.child({ file: 'components/content-engine/calendar-view.tsx' });
 
 interface CalendarViewProps {
   items: ContentItem[];
@@ -36,6 +40,7 @@ const statusColors: Record<string, string> = {
 };
 
 export function CalendarView({ items, planStartDate }: CalendarViewProps) {
+  const { userId } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date(planStartDate));
   const [selectedItem, setSelectedItem] = useState<ContentItem | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -45,6 +50,13 @@ export function CalendarView({ items, planStartDate }: CalendarViewProps) {
   const calendarStart = startOfWeek(monthStart);
   const calendarEnd = endOfWeek(monthEnd);
   const days = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
+
+  log.debug('Rendering calendar grid', {
+    action: 'render_calendar_grid',
+    userId: userId || 'signed_out',
+    itemCount: items.length,
+    month: format(currentDate, 'yyyy-MM'),
+  });
 
   const itemsByDate = useMemo(() => {
     const grouped: Record<string, ContentItem[]> = {};
@@ -59,15 +71,21 @@ export function CalendarView({ items, planStartDate }: CalendarViewProps) {
   }, [items]);
 
   const goToPreviousMonth = () => {
+    log.info('Moving calendar to previous month', {
+      action: 'navigate_calendar_month',
+      userId: userId || 'signed_out',
+      direction: 'previous',
+    });
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
   };
 
   const goToNextMonth = () => {
+    log.info('Moving calendar to next month', {
+      action: 'navigate_calendar_month',
+      userId: userId || 'signed_out',
+      direction: 'next',
+    });
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
-  };
-
-  const goToToday = () => {
-    setCurrentDate(new Date());
   };
 
   const handleItemClick = (item: ContentItem) => {
@@ -90,13 +108,20 @@ export function CalendarView({ items, planStartDate }: CalendarViewProps) {
             {format(currentDate, 'MMMM yyyy')}
           </h2>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={goToToday}>
-              Today
-            </Button>
-            <Button variant="outline" size="icon" onClick={goToPreviousMonth}>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8 rounded-md border-border/80"
+              onClick={goToPreviousMonth}
+            >
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <Button variant="outline" size="icon" onClick={goToNextMonth}>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8 rounded-md border-border/80"
+              onClick={goToNextMonth}
+            >
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>

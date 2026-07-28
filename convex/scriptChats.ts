@@ -65,6 +65,7 @@ export const createSession = mutation({
     title: v.string(),
     editorContent: v.any(),
   },
+  returns: v.any(),
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
     const now = new Date().toISOString();
@@ -72,10 +73,19 @@ export const createSession = mutation({
       user_id: userId,
       title: args.title,
       editor_content: args.editorContent,
+      scheduled_date: now,
       created_at: now,
       updated_at: now,
     });
-    return await ctx.db.get(id);
+    const session = await ctx.db.get(id);
+    log.info('Created script chat session with default schedule date', {
+      userId,
+      action: 'create_script_chat_session',
+      sessionId: id,
+      scheduledDate: now,
+      statusCode: 200,
+    });
+    return session;
   },
 });
 
@@ -138,6 +148,55 @@ export const updateSessionTitle = mutation({
       updated_at: new Date().toISOString(),
     });
     return await ctx.db.get(args.sessionId);
+  },
+});
+
+export const updateSessionScheduleDate = mutation({
+  args: {
+    sessionId: v.id('script_chat_sessions'),
+    scheduledDate: v.string(),
+  },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    if (Number.isNaN(Date.parse(args.scheduledDate))) {
+      log.error('Rejected an invalid script schedule date', {
+        userId,
+        action: 'update_script_chat_schedule_date',
+        sessionId: args.sessionId,
+        scheduledDate: args.scheduledDate,
+        error: 'Invalid schedule date',
+        statusCode: 400,
+      });
+      throw new ConvexError('Invalid schedule date');
+    }
+
+    const session = await ctx.db.get(args.sessionId);
+    if (!session || session.user_id !== userId) {
+      log.error('Failed to find the script session for schedule update', {
+        userId,
+        action: 'update_script_chat_schedule_date',
+        sessionId: args.sessionId,
+        error: 'Chat session not found',
+        statusCode: 404,
+      });
+      throw new ConvexError('Chat session not found');
+    }
+
+    const updatedAt = new Date().toISOString();
+    await ctx.db.patch(args.sessionId, {
+      scheduled_date: args.scheduledDate,
+      updated_at: updatedAt,
+    });
+    const updatedSession = await ctx.db.get(args.sessionId);
+    log.info('Updated script schedule date', {
+      userId,
+      action: 'update_script_chat_schedule_date',
+      sessionId: args.sessionId,
+      scheduledDate: args.scheduledDate,
+      statusCode: 200,
+    });
+    return updatedSession;
   },
 });
 

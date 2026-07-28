@@ -43,9 +43,10 @@ const InstantExecutionOutputSchema = z.object({
 const EditProposalSchema = z.object({
   content: z.string().describe("A brief explanation of the proposed changes"),
   proposedChanges: z.array(z.object({
-    section: z.string().describe("The section being edited (e.g., 'markdown', 'fullScript', 'hook')"),
+    section: z.string().describe("A short label for the exact script section being edited"),
+    scope: z.enum(["sentence", "paragraph", "section"]).describe("The size of this independent replacement"),
     before: z.string().describe("An exact contiguous substring copied verbatim from the current script"),
-    after: z.string().describe("Only the localized replacement for the exact text in before"),
+    after: z.string().describe("Only the replacement for before; use an empty string when deleting that passage"),
     description: z.string().describe("Why this change was made")
   }))
 });
@@ -88,11 +89,12 @@ export async function generateInitialScript(
  */
 export async function generateEditProposal(
   editRequest: string,
-  currentContent: any,
+  currentContent: unknown,
   userProfile: UserContentProfile | null,
   modelName: AIModelName = AI_MODELS.GOOGLE_PRO.model,
   userId = 'unknown',
   sessionId = 'unknown',
+  verificationFeedback = '',
 ): Promise<{ content: string; proposedChanges: EditProposal[] }> {
   const log = logger.child({
     module: 'InstantExecutionGenerator',
@@ -105,27 +107,46 @@ export async function generateEditProposal(
 
   const contextContext = buildProfileContext(userProfile);
 
+  const serializedContent =
+    typeof currentContent === 'string'
+      ? currentContent
+      : JSON.stringify(currentContent, null, 2);
   const fullPrompt = `
-You are helping edit a video script. The user wants to make changes to their existing draft.
+Edit the current script according to the user's request.
 
----
-CURRENT SCRIPT CONTENT:
-${typeof currentContent === 'string' ? currentContent : JSON.stringify(currentContent, null, 2)}
+<current_script>
+${serializedContent}
+</current_script>
 
----
-CONTEXT:
+<creator_context>
 ${contextContext}
+</creator_context>
 
----
-USER'S EDIT REQUEST:
+<edit_request>
 ${editRequest}
+</edit_request>
 
-Analyze the request and generate specific edit proposals.
-Return one localized proposal for each distinct change.
-For every proposal, copy an exact, contiguous substring from CURRENT SCRIPT CONTENT into 'before'.
-Put only the replacement for that substring in 'after', never the entire script.
-Keep proposals narrowly scoped to a paragraph, sentence, hook, or CTA.
-When several parts need changes, return several independent proposals so each can be accepted or rejected separately.
+Return independently actionable edit suggestions.
+
+SUGGESTION RULES:
+1. Read the ENTIRE current script before proposing changes.
+2. Identify every passage affected by the request, then create one suggestion per coherent sentence, paragraph, or section.
+3. There is no limit on the number of suggestions or on how much of the draft their combined changes may affect.
+4. Never return the entire script as one suggestion. Never copy the full script into "before" or "after".
+5. For draft-wide requests such as expanding, condensing, restructuring, changing tone, or meeting a length target, split the work into multiple non-overlapping paragraph or section suggestions.
+6. Each "before" must be one exact, contiguous, verbatim substring from <current_script>. Do not paraphrase it, normalize whitespace, or use a stale version.
+7. Each "after" must contain only the replacement for its own "before" range, never the complete revised script.
+8. Suggestions must not overlap. A character from the current script may belong to at most one suggestion.
+9. Preserve untouched content. Preserve useful Markdown structure unless the request changes it.
+10. Expansion and condensation are both allowed. To remove a passage, return its exact text in "before" and an empty string in "after".
+11. Keep suggestions meaningful: prefer the smallest complete passage that can be accepted or rejected without depending on another suggestion.
+12. For script-level changes, evaluate every existing passage for relevance. Delete obsolete, repetitive, contradictory, off-topic, or no-longer-needed passages instead of merely rewording them.
+13. Do not preserve material just because it exists in the current draft. If it weakens the requested result, create a deletion suggestion with an empty "after".
+
+QUALITY REVIEW FEEDBACK FROM A PRIOR ATTEMPT:
+${verificationFeedback || 'This is the first attempt. No prior review feedback is available.'}
+
+Before responding, verify that every "before" exists verbatim in the current script, no ranges overlap, no suggestion covers the complete script, and the combined suggestions fully address the request.
 `.trim();
 
   try {
@@ -135,9 +156,15 @@ When several parts need changes, return several independent proposals so each ca
       sessionId,
       editRequestLength: editRequest.length,
       currentContentType: typeof currentContent,
+      currentContentLength: serializedContent.length,
+      hasVerificationFeedback: Boolean(verificationFeedback),
     });
     const result = await model.invoke([
-      { role: 'system', content: 'You are an expert script editor.' },
+      {
+        role: 'system',
+        content:
+          'You are a meticulous script editor. Return exact, independently actionable replacement ranges and never a whole-document replacement.',
+      },
       { role: 'user', content: fullPrompt }
     ]) as any;
 

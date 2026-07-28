@@ -202,7 +202,7 @@ export function ChatMessage({ message, sessionId, onContentUpdate, editorContent
   return (
     <div className={cn("flex", isUser ? 'justify-end' : 'justify-start')}>
       <div
-        className={cn("max-w-[87%] px-3 py-2", isUser
+        className={cn("max-w-[92%] px-3 py-2", isUser
           ? 'rounded-xl border border-border/50 bg-[#2A2A2A]/40 text-foreground dark:bg-[#1E1E1E]'
           : 'rounded-lg'
         )}

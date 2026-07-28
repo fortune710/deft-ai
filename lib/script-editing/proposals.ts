@@ -6,7 +6,16 @@ import type {
 } from "../../types/script-chat";
 
 const log = logger.child({ file: "lib/script-editing/proposals.ts" });
-const MAX_REPLACEMENT_RATIO = 0.65;
+const EXPLICIT_DOCUMENT_SCOPE_PATTERN =
+  /\b(?:entire|whole|full)\s+(?:script|draft|piece|content)\b/i;
+const DOCUMENT_TRANSFORMATION_PATTERN =
+  /\b(?:flesh\s+out|expand|condense|shorten|reduce|compress|trim|restructure|rewrite)\b[\s\S]{0,80}\b(?:script|draft|piece|content)\b/i;
+const DOCUMENT_LENGTH_PATTERN =
+  /\b(?:to|into|under|around|approximately|exactly)\s+\d+\s+(?:paragraphs?|words?)\b/i;
+const DOCUMENT_ATTRIBUTE_PATTERN =
+  /\b(?:script|draft|piece|content)\b[\s\S]{0,80}\b(?:punchier|stronger|clearer|tighter|shorter|longer|more\s+(?:concise|focused|detailed|engaging)|less\s+(?:repetitive|verbose|formal))\b|\b(?:throughout|across)\s+(?:the\s+)?(?:script|draft|piece|content)\b/i;
+const LOCAL_SCOPE_PATTERN =
+  /\b(?:first|last|opening|closing|intro(?:duction)?|conclusion|hook|cta|sentence|paragraph|section)\b/i;
 
 export type ProposalResolution = Exclude<ChangeStatus, "pending">;
 
@@ -20,6 +29,142 @@ export type SuggestionLocator = {
   messageId: string;
   proposalIndex: number;
 };
+
+export type ProposalSourceMatch = {
+  index: number;
+  length: number;
+  text: string;
+  strategy: "exact" | "trimmed" | "flexible_whitespace";
+};
+
+function escapeRegex(value: string, userId: string): string {
+  const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  log.debug("Escaped proposal source text for bounded matching", {
+    userId,
+    action: "escape_script_proposal_source_regex",
+    sourceLength: value.length,
+    escapedLength: escaped.length,
+  });
+  return escaped;
+}
+
+export function locateProposalSourceText(
+  target: string,
+  proposalSource: string,
+  userId: string,
+): ProposalSourceMatch | null {
+  const exactIndex = target.indexOf(proposalSource);
+  if (exactIndex >= 0) {
+    log.debug("Located exact proposal source text", {
+      userId,
+      action: "locate_script_proposal_source",
+      strategy: "exact",
+      sourceLength: proposalSource.length,
+      targetLength: target.length,
+      matchIndex: exactIndex,
+    });
+    return {
+      index: exactIndex,
+      length: proposalSource.length,
+      text: proposalSource,
+      strategy: "exact",
+    };
+  }
+
+  const trimmedSource = proposalSource.trim();
+  if (!trimmedSource) {
+    log.warn("Could not locate an empty proposal source", {
+      userId,
+      action: "locate_script_proposal_source",
+      strategy: "trimmed",
+      sourceLength: proposalSource.length,
+      targetLength: target.length,
+    });
+    return null;
+  }
+
+  const trimmedIndex = target.indexOf(trimmedSource);
+  if (trimmedIndex >= 0) {
+    log.debug("Located trimmed proposal source text", {
+      userId,
+      action: "locate_script_proposal_source",
+      strategy: "trimmed",
+      sourceLength: trimmedSource.length,
+      targetLength: target.length,
+      matchIndex: trimmedIndex,
+    });
+    return {
+      index: trimmedIndex,
+      length: trimmedSource.length,
+      text: trimmedSource,
+      strategy: "trimmed",
+    };
+  }
+
+  const flexiblePattern = trimmedSource
+    .split(/\s+/)
+    .map((part) => escapeRegex(part, userId))
+    .join("\\s+");
+  const flexibleMatch = new RegExp(flexiblePattern, "u").exec(target);
+  if (!flexibleMatch || flexibleMatch.index === undefined) {
+    log.warn("Could not locate proposal source text", {
+      userId,
+      action: "locate_script_proposal_source",
+      strategy: "flexible_whitespace",
+      sourceLength: trimmedSource.length,
+      targetLength: target.length,
+    });
+    return null;
+  }
+
+  log.debug("Located proposal source with flexible whitespace matching", {
+    userId,
+    action: "locate_script_proposal_source",
+    strategy: "flexible_whitespace",
+    sourceLength: trimmedSource.length,
+    targetLength: target.length,
+    matchIndex: flexibleMatch.index,
+    matchedLength: flexibleMatch[0].length,
+  });
+  return {
+    index: flexibleMatch.index,
+    length: flexibleMatch[0].length,
+    text: flexibleMatch[0],
+    strategy: "flexible_whitespace",
+  };
+}
+
+export function isDocumentRewriteRequest(
+  editRequest: string,
+  userId: string,
+): boolean {
+  const hasExplicitDocumentScope =
+    EXPLICIT_DOCUMENT_SCOPE_PATTERN.test(editRequest);
+  const hasDocumentTransformation =
+    DOCUMENT_TRANSFORMATION_PATTERN.test(editRequest);
+  const hasDocumentLengthConstraint =
+    DOCUMENT_LENGTH_PATTERN.test(editRequest);
+  const hasDocumentAttributeChange =
+    DOCUMENT_ATTRIBUTE_PATTERN.test(editRequest);
+  const hasLocalScope = LOCAL_SCOPE_PATTERN.test(editRequest);
+  const isDocumentRewrite =
+    hasExplicitDocumentScope ||
+    hasDocumentLengthConstraint ||
+    hasDocumentAttributeChange ||
+    (hasDocumentTransformation && !hasLocalScope);
+  log.info("Classified script edit request scope", {
+    userId,
+    action: "classify_script_edit_request_scope",
+    requestLength: editRequest.length,
+    hasExplicitDocumentScope,
+    hasDocumentTransformation,
+    hasDocumentLengthConstraint,
+    hasDocumentAttributeChange,
+    hasLocalScope,
+    isDocumentRewrite,
+  });
+  return isDocumentRewrite;
+}
 
 export function createSuggestionMarkup(
   proposal: EditProposal,
@@ -78,34 +223,87 @@ export function anchorEditProposalsToCurrentContent(
     typeof currentContent === "string"
       ? materializeSuggestionsForGeneration(currentContent, userId)
       : currentContent;
-  const anchoredProposals = proposals.flatMap((proposal) => {
+  const anchoredProposals: EditProposal[] = [];
+  const occupiedRanges = new Map<string, Array<{ start: number; end: number }>>();
+
+  for (const proposal of proposals) {
     const source = proposal.before.trim();
-    if (!source) return [];
+    if (!source) continue;
+    if (proposal.scope === "document") {
+      log.warn("Discarded a document-level edit proposal", {
+        userId,
+        action: "anchor_edit_proposals_to_current_script",
+        section: proposal.section,
+        scope: proposal.scope,
+        reason: "whole_script_suggestions_are_not_independently_actionable",
+      });
+      continue;
+    }
+    const targetKey =
+      typeof comparableContent === "string"
+        ? "markdown"
+        : proposal.section === "goalAlignedCTA"
+          ? "goalAlignedCTA"
+          : "fullScript";
     const target =
       typeof comparableContent === "string"
         ? comparableContent
         : proposal.section === "goalAlignedCTA"
           ? comparableContent.goalAlignedCTA
           : comparableContent.fullScript;
-    const exactSource = target.includes(proposal.before)
-      ? proposal.before
-      : source !== proposal.before && target.includes(source)
-        ? source
-        : null;
-    if (
-      !exactSource ||
-      exactSource.length / Math.max(target.length, 1) > MAX_REPLACEMENT_RATIO
-    ) {
-      return [];
+    const match = locateProposalSourceText(target, proposal.before, userId);
+    if (!match) continue;
+
+    const coversWholeTarget =
+      target.slice(0, match.index).trim().length === 0 &&
+      target.slice(match.index + match.length).trim().length === 0;
+    if (coversWholeTarget) {
+      log.warn("Discarded a suggestion that replaced the complete script", {
+        userId,
+        action: "anchor_edit_proposals_to_current_script",
+        section: proposal.section,
+        scope: proposal.scope ?? "sentence",
+        targetLength: target.length,
+      });
+      continue;
     }
-    return [{ ...proposal, before: exactSource }];
-  });
+
+    const ranges = occupiedRanges.get(targetKey) ?? [];
+    const nextRange = {
+      start: match.index,
+      end: match.index + match.length,
+    };
+    const overlapsExisting = ranges.some(
+      (range) =>
+        nextRange.start < range.end &&
+        nextRange.end > range.start,
+    );
+    if (overlapsExisting) {
+      log.warn("Discarded an overlapping script edit suggestion", {
+        userId,
+        action: "anchor_edit_proposals_to_current_script",
+        section: proposal.section,
+        scope: proposal.scope ?? "sentence",
+        matchIndex: match.index,
+        matchLength: match.length,
+      });
+      continue;
+    }
+
+    ranges.push(nextRange);
+    occupiedRanges.set(targetKey, ranges);
+    anchoredProposals.push({ ...proposal, before: match.text });
+  }
+
   log.info("Anchored generated edit proposals to the current script snapshot", {
     userId,
     action: "anchor_edit_proposals_to_current_script",
     proposalCount: proposals.length,
     anchoredProposalCount: anchoredProposals.length,
     discardedProposalCount: proposals.length - anchoredProposals.length,
+    documentProposalCount: proposals.filter(
+      (proposal) => proposal.scope === "document",
+    ).length,
   });
   return anchoredProposals;
 }
@@ -154,11 +352,9 @@ export function applyEditProposalToContent(
     : proposal.section === "goalAlignedCTA"
       ? currentContent.goalAlignedCTA
       : currentContent.fullScript;
-  const exactIndex = target.indexOf(proposal.before);
-  const trimmedIndex = exactIndex >= 0 ? exactIndex : target.indexOf(source);
-  const matchedSource = exactIndex >= 0 ? proposal.before : source;
+  const match = locateProposalSourceText(target, proposal.before, userId);
 
-  if (trimmedIndex < 0) {
+  if (!match) {
     log.warn("Refused an edit proposal whose source text was not found", {
       userId,
       action: "apply_partial_script_edit_proposal",
@@ -174,16 +370,18 @@ export function applyEditProposalToContent(
     };
   }
 
-  const replacementRatio = matchedSource.length / Math.max(target.length, 1);
-  if (replacementRatio > MAX_REPLACEMENT_RATIO) {
-    log.warn("Refused an edit proposal that covered most of the script", {
+  const coversWholeTarget =
+    target.slice(0, match.index).trim().length === 0 &&
+    target.slice(match.index + match.length).trim().length === 0;
+  if (proposal.scope === "document" || coversWholeTarget) {
+    log.warn("Refused an edit proposal that replaced the complete script", {
       userId,
       action: "apply_partial_script_edit_proposal",
       section: proposal.section,
       reason: "scope_too_broad",
-      replacementRatio,
-      sourceLength: matchedSource.length,
+      sourceLength: match.length,
       targetLength: target.length,
+      scope: proposal.scope ?? "sentence",
     });
     return {
       applied: false,
@@ -192,7 +390,7 @@ export function applyEditProposalToContent(
     };
   }
 
-  const updatedTarget = `${target.slice(0, trimmedIndex)}${proposal.after}${target.slice(trimmedIndex + matchedSource.length)}`;
+  const updatedTarget = `${target.slice(0, match.index)}${proposal.after}${target.slice(match.index + match.length)}`;
   const content = isMarkdown
     ? updatedTarget
     : proposal.section === "goalAlignedCTA"
@@ -203,9 +401,11 @@ export function applyEditProposalToContent(
     userId,
     action: "apply_partial_script_edit_proposal",
     section: proposal.section,
-    replacementRatio,
-    sourceLength: matchedSource.length,
+    replacementRatio: match.length / Math.max(target.length, 1),
+    sourceLength: match.length,
     replacementLength: proposal.after.length,
+    matchStrategy: match.strategy,
+    scope: proposal.scope ?? "sentence",
   });
   return { applied: true, content };
 }
