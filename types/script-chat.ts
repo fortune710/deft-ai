@@ -1,8 +1,10 @@
-import type { AttachmentReference } from '@/types/chat-attachments';
+import type { AttachmentReference } from "./chat-attachments";
+import type { Platform } from "./content-engine";
 
-export type MessageRole = 'user' | 'assistant';
-export type MessageType = 'ask' | 'edit';
-export type ChangeStatus = 'pending' | 'accepted' | 'rejected';
+export type MessageRole = "user" | "assistant";
+export type MessageType = "ask" | "edit";
+export type ChangeStatus = "pending" | "accepted" | "rejected";
+export type ScriptDuration = "really_short" | "medium" | "long";
 
 export interface HookOption {
   id: string;
@@ -30,6 +32,7 @@ export interface PlatformMetadata {
 }
 
 export interface EditorContent {
+  contentItemId?: string;
   hookOptions: HookOption[];
   selectedHookId: string | null;
   fullScript: string;
@@ -39,6 +42,8 @@ export interface EditorContent {
   goalAlignedCTA: string;
   estimatedDuration: string;
   platform?: string;
+  platforms?: Platform[];
+  durationPreset?: ScriptDuration;
 }
 
 export interface InstantExecutionOutput {
@@ -57,6 +62,8 @@ export interface EditProposal {
   before: string;
   after: string;
   description: string;
+  scope?: "sentence" | "paragraph" | "section" | "document";
+  status?: ChangeStatus;
 }
 
 export interface ChatMessage {
@@ -77,6 +84,7 @@ export interface ChatSession {
   user_id: string;
   title: string;
   editor_content: EditorContent;
+  scheduled_date: string;
   created_at: string;
   updated_at: string;
 }

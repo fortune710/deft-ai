@@ -129,6 +129,16 @@
   }
 }
 
+@media (min-width: 768px) {
+  :root {
+    --sidebar-background: 0 0% 96.5%;
+  }
+
+  .dark {
+    --sidebar-background: 0 0% 7.5%;
+  }
+}
+
 @layer base {
   * {
     @apply border-border;
@@ -190,5 +200,24 @@
   .mdxeditor-root .mdxeditor-toolbar button svg {
     fill: white !important;
     color: white !important;
+  }
+
+  .mdxeditor-root code:not(pre code),
+  .mdxeditor-root [class*="_code_"] {
+    background-color: hsl(var(--primary)) !important;
+    color: hsl(var(--primary-foreground)) !important;
+    border-radius: calc(var(--radius) - 4px);
+    padding-inline: 0.125rem;
+  }
+
+  .mdxeditor-root code:not(pre code) [class*="_code_"],
+  .mdxeditor-root [class*="_code_"] > [data-lexical-text="true"] {
+    background-color: transparent !important;
+    padding-inline: 0;
+  }
+
+  .mdxeditor-root code:not(pre code)::before,
+  .mdxeditor-root code:not(pre code)::after {
+    content: none !important;
   }
 }

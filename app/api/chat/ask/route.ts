@@ -1,5 +1,4 @@
 import { NextRequest } from 'next/server';
-import { generateAskResponse } from '@/lib/ai/instant-execution-generator';
 import { ScriptGeneratorServerTracking } from '@/lib/posthog/server';
 import { logger } from '@/lib/logger.server';
 import { api } from '@/convex/_generated/api';
@@ -54,18 +53,19 @@ export async function POST(req: NextRequest) {
         headers: { 'Content-Type': 'application/json' },
       });
     }
-    const response = messageContext.message.attachment_refs?.length
-      ? await generateAttachmentAwareAnswer({
-          request: question,
-          currentContent,
-          userProfile: profile,
-          modelName: model as any,
-          userId,
-          messageId: messageId as Id<'script_chat_messages'>,
-          convex: authenticated.convex,
-          history: messageContext.history.map((message) => ({ role: message.role, content: message.content })),
-        })
-      : await generateAskResponse(question, currentContent, profile, model as any);
+    const response = await generateAttachmentAwareAnswer({
+      request: question,
+      currentContent,
+      userProfile: profile,
+      modelName: model as any,
+      userId,
+      messageId: messageId as Id<'script_chat_messages'>,
+      convex: authenticated.convex,
+      history: messageContext.history.map((message) => ({
+        role: message.role,
+        content: message.content,
+      })),
+    });
 
     await ScriptGeneratorServerTracking.ask({
       questionLength,

@@ -22,6 +22,12 @@ const mimeByExtension: Record<string, string> = {
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.webp': 'image/webp',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.m4a': 'audio/mp4',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+  '.mov': 'video/quicktime',
 };
 
 export async function POST(request: NextRequest) {
@@ -68,7 +74,7 @@ export async function POST(request: NextRequest) {
         fileSize: fileValue.size,
         statusCode: 413,
       });
-      return NextResponse.json({ error: 'Each file must be 10 MB or smaller' }, { status: 413 });
+      return NextResponse.json({ error: 'Each file must be 50 MB or smaller' }, { status: 413 });
     }
     if (!validExtension || !validMimeType || mimeByExtension[extension] !== normalizedMimeType) {
       log.warn('Rejected unsupported chat attachment metadata', {

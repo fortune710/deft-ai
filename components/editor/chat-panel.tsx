@@ -14,6 +14,8 @@ import { toast } from 'sonner';
 import { logger } from '@/lib/logger';
 import { useAuth } from '@/hooks/use-clerk-auth';
 import { useChatAttachments } from '@/hooks/use-chat-attachments';
+import { materializeSuggestionsForGeneration } from '@/lib/script-editing/proposals';
+import type { EditProposal } from '@/types/script-chat';
 
 const log = logger.child({ component: 'ChatPanel' });
 
@@ -23,6 +25,7 @@ interface ChatPanelProps {
   editorContent: EditorContent | string;
   onClose: () => void;
   onContentUpdate: (content: any) => void;
+  onProposalsGenerated?: (proposals: EditProposal[], messageId: string) => void;
   showHeader?: boolean;
 }
 
@@ -32,6 +35,7 @@ export function ChatPanel({
   editorContent,
   onClose,
   onContentUpdate,
+  onProposalsGenerated,
   showHeader = true,
 }: ChatPanelProps) {
   const [mode, setMode] = useLocalStorage<MessageType>(storageKeys.localStorage.chatMode, 'ask');
@@ -44,6 +48,7 @@ export function ChatPanel({
   const { data: attachments } = useChatAttachments(sessionId);
   const hasBlockingAttachments = attachments.some((attachment) => attachment.isSelected
     && (attachment.processingStatus === 'queued' || attachment.processingStatus === 'processing'));
+  const latestMessageId = messages.at(-1)?.id ?? null;
 
   log.debug('Rendering script chat panel', {
     action: 'render_script_chat_panel',
@@ -53,8 +58,15 @@ export function ChatPanel({
   });
 
   useEffect(() => {
+    if (!latestMessageId) return;
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    log.debug('Scrolled the assistant panel for a newly appended message', {
+      action: 'scroll_script_chat_to_latest_message',
+      userId: userId || 'signed_out',
+      sessionId,
+      latestMessageId,
+    });
+  }, [latestMessageId, sessionId, userId]);
 
   const handleSend = async () => {
     if (!input.trim() || isGenerating) return;
@@ -73,6 +85,12 @@ export function ChatPanel({
       userId: userId || 'signed_out',
     });
     const userMessage = input.trim();
+    const currentGenerationContent = typeof editorContent === 'string'
+      ? materializeSuggestionsForGeneration(
+          editorContent,
+          userId || 'signed_out',
+        )
+      : editorContent;
     setInput('');
     setIsGenerating(true);
 
@@ -92,7 +110,7 @@ export function ChatPanel({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             question: userMessage,
-            currentContent: editorContent,
+            currentContent: currentGenerationContent,
             sessionId,
             model: selectedModel,
             messageId: savedUserMessage.id,
@@ -118,7 +136,7 @@ export function ChatPanel({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             editRequest: userMessage,
-            currentContent: editorContent,
+            currentContent: currentGenerationContent,
             sessionId,
             model: selectedModel,
             messageId: savedUserMessage.id,
@@ -134,13 +152,23 @@ export function ChatPanel({
           proposedChanges: data.proposedChanges
         });
 
-        await saveMessage.mutateAsync({
+        const savedAssistantMessage = await saveMessage.mutateAsync({
           sessionId,
           role: 'assistant',
           messageType: mode,
           content: data.content,
           proposedChanges: data.proposedChanges,
           changeStatus: 'pending',
+        });
+        onProposalsGenerated?.(
+          data.proposedChanges as EditProposal[],
+          savedAssistantMessage.id,
+        );
+        sessionLog.info('Forwarded exact edit proposals to the script editor', {
+          action: 'highlight_generated_script_edit_proposals',
+          userId: userId || 'signed_out',
+          assistantMessageId: savedAssistantMessage.id,
+          proposalCount: (data.proposedChanges as EditProposal[]).length,
         });
       }
     } catch (error) {
@@ -169,7 +197,7 @@ export function ChatPanel({
         </div>
       )}
 
-      <div className="flex-1 overflow-auto px-4 py-4 space-y-4 custom-scrollbar pb-4">
+      <div className="custom-scrollbar flex-1 space-y-4 overflow-auto px-4 pb-1 pt-4">
         {messages.length === 0 ? (
           <div className="text-center text-muted-foreground text-sm py-8">
             <p className="mb-2">Start a conversation</p>

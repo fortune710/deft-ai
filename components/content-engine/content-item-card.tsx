@@ -1,17 +1,23 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
-import { format } from 'date-fns';
-import { MoreVertical, Trash2, Copy, Edit2, Calendar as CalendarIcon } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { format } from "date-fns";
+import {
+  MoreVertical,
+  Trash2,
+  Copy,
+  Edit2,
+  Calendar as CalendarIcon,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,7 +27,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -29,24 +35,26 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import { Calendar as DateCalendar } from '@/components/ui/calendar';
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Calendar as DateCalendar } from "@/components/ui/calendar";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from '@/components/ui/popover';
-import { useUpdateContentItem } from '@/hooks/use-content-items';
-import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
-import type { ContentItem, Platform } from '@/types/content-engine';
-import { logger } from '@/lib/logger';
-import { useAuth } from '@/hooks/use-clerk-auth';
+} from "@/components/ui/popover";
+import { useUpdateContentItem } from "@/hooks/use-content-items";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import type { ContentItem, Platform } from "@/types/content-engine";
+import { logger } from "@/lib/logger";
+import { useAuth } from "@/hooks/use-clerk-auth";
 
-const log = logger.child({ module: 'components/content-engine/content-item-card' });
+const log = logger.child({
+  module: "components/content-engine/content-item-card",
+});
 
 interface ContentItemCardProps {
   item: ContentItem;
@@ -57,21 +65,27 @@ interface ContentItemCardProps {
 }
 
 const platformColors: Record<Platform, string> = {
-  youtube: 'bg-red-500/10 text-red-600 border-red-500/20 dark:bg-red-500/20 dark:text-red-400',
-  instagram: 'bg-pink-500/10 text-pink-600 border-pink-500/20 dark:bg-pink-500/20 dark:text-pink-400',
-  tiktok: 'bg-cyan-500/10 text-cyan-600 border-cyan-500/20 dark:bg-cyan-500/20 dark:text-cyan-400',
-  twitter: 'bg-blue-500/10 text-blue-600 border-blue-500/20 dark:bg-blue-500/20 dark:text-blue-400',
-  linkedin: 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20 dark:bg-indigo-500/20 dark:text-indigo-400',
-  facebook: 'bg-blue-600/10 text-blue-700 border-blue-600/20 dark:bg-blue-600/20 dark:text-blue-300',
+  youtube:
+    "bg-red-500/10 text-red-600 border-red-500/20 dark:bg-red-500/20 dark:text-red-400",
+  instagram:
+    "bg-pink-500/10 text-pink-600 border-pink-500/20 dark:bg-pink-500/20 dark:text-pink-400",
+  tiktok:
+    "bg-cyan-500/10 text-cyan-600 border-cyan-500/20 dark:bg-cyan-500/20 dark:text-cyan-400",
+  twitter:
+    "bg-blue-500/10 text-blue-600 border-blue-500/20 dark:bg-blue-500/20 dark:text-blue-400",
+  linkedin:
+    "bg-indigo-500/10 text-indigo-600 border-indigo-500/20 dark:bg-indigo-500/20 dark:text-indigo-400",
+  facebook:
+    "bg-blue-600/10 text-blue-700 border-blue-600/20 dark:bg-blue-600/20 dark:text-blue-300",
 };
 
 const platformLabels: Record<Platform, string> = {
-  youtube: 'YouTube',
-  instagram: 'Instagram',
-  tiktok: 'TikTok',
-  twitter: 'Twitter',
-  linkedin: 'LinkedIn',
-  facebook: 'Facebook',
+  youtube: "YouTube",
+  instagram: "Instagram",
+  tiktok: "TikTok",
+  twitter: "Twitter",
+  linkedin: "LinkedIn",
+  facebook: "Facebook",
 };
 
 export function ContentItemCard({
@@ -88,9 +102,9 @@ export function ContentItemCard({
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const updateItem = useUpdateContentItem();
 
-  log.debug('Rendering content item card', {
-    userId: userId || 'signed_out',
-    action: 'render_content_item_card',
+  log.debug("Rendering content item card", {
+    userId: userId || "signed_out",
+    action: "render_content_item_card",
     itemId: item.id,
     isDragging,
   });
@@ -101,15 +115,17 @@ export function ContentItemCard({
   }, [item.title]);
 
   const scheduledDate = new Date(item.scheduled_date);
-  const formattedDate = format(scheduledDate, 'MMM d');
-  const daysUntil = Math.ceil((scheduledDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  const formattedDate = format(scheduledDate, "MMM d");
+  const daysUntil = Math.ceil(
+    (scheduledDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+  );
 
   const handleRenameSelect = (e: Event) => {
     // Radix DropdownMenu uses `onSelect` (Event), not React.MouseEvent.
     e.preventDefault();
-    log.info('Opening content item rename dialog', {
-      userId: userId || 'signed_out',
-      action: 'open_content_item_rename',
+    log.info("Opening content item rename dialog", {
+      userId: userId || "signed_out",
+      action: "open_content_item_rename",
       itemId: item.id,
     });
     setNewTitle(item.title);
@@ -117,13 +133,13 @@ export function ContentItemCard({
   };
 
   const handleRename = async () => {
-    log.info('Renaming content item', {
-      userId: userId || 'signed_out',
-      action: 'rename_content_item',
+    log.info("Renaming content item", {
+      userId: userId || "signed_out",
+      action: "rename_content_item",
       itemId: item.id,
     });
     if (!newTitle.trim()) {
-      toast.error('Title cannot be empty');
+      toast.error("Title cannot be empty");
       return;
     }
 
@@ -137,16 +153,16 @@ export function ContentItemCard({
         itemId: item.id,
         updates: { title: newTitle.trim() },
       });
-      toast.success('Content item renamed');
+      toast.success("Content item renamed");
       setRenameDialogOpen(false);
     } catch (error) {
-      log.error('Failed to rename content item', {
-        userId: userId || 'signed_out',
-        action: 'rename_content_item',
+      log.error("Failed to rename content item", {
+        userId: userId || "signed_out",
+        action: "rename_content_item",
         itemId: item.id,
         error: error instanceof Error ? error.message : String(error),
       });
-      toast.error('Failed to rename content item');
+      toast.error("Failed to rename content item");
     }
   };
 
@@ -154,8 +170,9 @@ export function ContentItemCard({
     <>
       <div
         className={cn(
-          'group rounded-xl border border-border bg-card p-4 shadow-sm transition-[transform,opacity,box-shadow,border-color,background-color] duration-[160ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:border-primary/30 motion-reduce:transform-none',
-          isDragging && 'scale-[1.015] border-primary/40 bg-card opacity-95 shadow-xl motion-reduce:transform-none',
+          "group rounded-xl border border-border bg-card p-4 shadow-sm transition-[transform,opacity,box-shadow,border-color,background-color] duration-[160ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:border-primary/30 motion-reduce:transform-none",
+          isDragging &&
+            "scale-[1.015] border-primary/40 bg-card opacity-95 shadow-xl motion-reduce:transform-none",
         )}
       >
         <div className="flex items-start justify-between gap-2 mb-2">
@@ -163,7 +180,8 @@ export function ContentItemCard({
             variant="outline"
             className={cn(
               "flex h-5 items-center justify-center rounded-full border px-2 py-0 text-center text-[11px] font-semibold tracking-[0.02em]",
-              platformColors[item.platform.toLowerCase() as Platform] || 'bg-gray-100 text-gray-700'
+              platformColors[item.platform.toLowerCase() as Platform] ||
+                "bg-gray-100 text-gray-700",
             )}
           >
             {platformLabels[item.platform] || item.platform}
@@ -173,8 +191,8 @@ export function ContentItemCard({
               <Button
                 variant="ghost"
                 size="icon"
-              className="z-10 h-7 w-7 opacity-100"
-              aria-label={`More actions for ${item.title}`}
+                className="z-10 h-7 w-7 opacity-100"
+                aria-label={`More actions for ${item.title}`}
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -196,9 +214,7 @@ export function ContentItemCard({
                 <Edit2 className="mr-2 h-4 w-4" />
                 Rename
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => onDuplicate(item.id)}
-              >
+              <DropdownMenuItem onSelect={() => onDuplicate(item.id)}>
                 <Copy className="mr-2 h-4 w-4" />
                 Duplicate
               </DropdownMenuItem>
@@ -218,11 +234,13 @@ export function ContentItemCard({
         </div>
 
         <Link
-          href={`/script-creator/edit-content/${item.id}`}
+          href={`/scripts/edit/${item.id}`}
           className="mb-2 block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           aria-label={`Open ${item.title}`}
         >
-          <h4 className="line-clamp-2 text-sm font-semibold leading-snug tracking-[-0.01em]">{item.title}</h4>
+          <h4 className="line-clamp-2 text-sm font-semibold leading-snug tracking-[-0.01em]">
+            {item.title}
+          </h4>
           {item.description && (
             <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
               {item.description}
@@ -250,7 +268,7 @@ export function ContentItemCard({
                 <span>{formattedDate}</span>
                 {daysUntil >= 0 && (
                   <span className="ml-1 text-[11px] text-muted-foreground">
-                    {daysUntil === 0 ? 'Today' : `${daysUntil}d`}
+                    {daysUntil === 0 ? "Today" : `${daysUntil}d`}
                   </span>
                 )}
               </Button>
@@ -267,26 +285,32 @@ export function ContentItemCard({
                 onSelect={(date) => {
                   if (!date) return;
                   updateItem.mutate(
-                    { itemId: item.id, updates: { scheduled_date: format(date, 'yyyy-MM-dd') } },
+                    {
+                      itemId: item.id,
+                      updates: { scheduled_date: format(date, "yyyy-MM-dd") },
+                    },
                     {
                       onSuccess: () => {
-                        log.info('Updated content item schedule', {
-                          userId: userId || 'signed_out',
-                          action: 'update_content_item_schedule',
+                        log.info("Updated content item schedule", {
+                          userId: userId || "signed_out",
+                          action: "update_content_item_schedule",
                           itemId: item.id,
                         });
-                        toast.success('Schedule updated');
+                        toast.success("Schedule updated");
                       },
                       onError: (error) => {
-                        log.error('Failed to update content item schedule', {
-                          userId: userId || 'signed_out',
-                          action: 'update_content_item_schedule',
+                        log.error("Failed to update content item schedule", {
+                          userId: userId || "signed_out",
+                          action: "update_content_item_schedule",
                           itemId: item.id,
-                          error: error instanceof Error ? error.message : String(error),
+                          error:
+                            error instanceof Error
+                              ? error.message
+                              : String(error),
                         });
-                        toast.error('Failed to update schedule');
+                        toast.error("Failed to update schedule");
                       },
-                    }
+                    },
                   );
                   setScheduleOpen(false);
                 }}
@@ -318,7 +342,7 @@ export function ContentItemCard({
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                     e.preventDefault();
                     handleRename();
                   }
@@ -328,7 +352,8 @@ export function ContentItemCard({
                 rows={3}
               />
               <p className="text-xs text-muted-foreground">
-                Tip: Press <span className="font-medium">Ctrl/⌘ + Enter</span> to save.
+                Tip: Press <span className="font-medium">Ctrl/⌘ + Enter</span>{" "}
+                to save.
               </p>
             </div>
           </div>
@@ -345,7 +370,7 @@ export function ContentItemCard({
               onClick={handleRename}
               disabled={updateItem.isPending || !newTitle.trim()}
             >
-              {updateItem.isPending ? 'Saving...' : 'Save'}
+              {updateItem.isPending ? "Saving..." : "Save"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -356,7 +381,8 @@ export function ContentItemCard({
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete your content idea.
+              This action cannot be undone. This will permanently delete your
+              content idea.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

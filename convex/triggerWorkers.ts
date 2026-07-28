@@ -21,6 +21,12 @@ const attachmentMimeByExtension: Record<string, string> = {
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.webp': 'image/webp',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.m4a': 'audio/mp4',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+  '.mov': 'video/quicktime',
 };
 
 const processingStep = v.union(
@@ -157,7 +163,7 @@ export const finalizeChatAttachmentUpload = mutation({
       extension as (typeof CHAT_ATTACHMENT_ALLOWED_EXTENSIONS)[number],
     );
     if (trustedSize <= 0 || trustedSize > CHAT_ATTACHMENT_MAX_BYTES) {
-      return await rejectUpload('Each file must be 10 MB or smaller', 413);
+      return await rejectUpload('Each file must be 50 MB or smaller', 413);
     }
     if (args.sizeBytes !== trustedSize) return await rejectUpload('Uploaded file size does not match', 400);
     if (!supportedMimeType || !supportedExtension || expectedMimeType !== args.mimeType

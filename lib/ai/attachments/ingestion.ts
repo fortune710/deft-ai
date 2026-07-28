@@ -85,6 +85,16 @@ export function validateFileSignature(buffer: Buffer, mimeType: string, userId: 
       && buffer.subarray(8, 12).toString('ascii') === 'WEBP';
   } else if (mimeType === 'text/plain' || mimeType === 'text/markdown') {
     valid = !buffer.includes(0) && !buffer.toString('utf8').includes('\uFFFD');
+  } else if (mimeType === 'audio/mpeg') {
+    valid = buffer.subarray(0, 3).toString('ascii') === 'ID3'
+      || (buffer[0] === 0xff && (buffer[1] & 0xe0) === 0xe0);
+  } else if (mimeType === 'audio/wav') {
+    valid = buffer.subarray(0, 4).toString('ascii') === 'RIFF'
+      && buffer.subarray(8, 12).toString('ascii') === 'WAVE';
+  } else if (mimeType === 'audio/mp4' || mimeType === 'video/mp4' || mimeType === 'video/quicktime') {
+    valid = buffer.subarray(4, 8).toString('ascii') === 'ftyp';
+  } else if (mimeType === 'video/webm') {
+    valid = buffer[0] === 0x1a && buffer[1] === 0x45 && buffer[2] === 0xdf && buffer[3] === 0xa3;
   }
   log.info('Validated attachment file signature', {
     userId,
@@ -126,6 +136,11 @@ async function extractWithVision(buffer: Buffer, mimeType: string, userId: strin
     mimeType,
     sizeBytes: buffer.byteLength,
   });
+  const mediaKind = mimeType.startsWith('video/')
+    ? 'video'
+    : mimeType.startsWith('audio/')
+      ? 'audio recording'
+      : 'visual reference';
   const result = await model.invoke([
     {
       role: 'system',
@@ -135,7 +150,7 @@ async function extractWithVision(buffer: Buffer, mimeType: string, userId: strin
       role: 'user',
       content: [
         { type: mimeType, data: buffer.toString('base64') },
-        { type: 'text', text: 'Return visible text and an objective description of the file contents.' },
+        { type: 'text', text: `Analyze this ${mediaKind} as a multimodal reference. Return any discernible words plus objective visual, sonic, pacing, speaker, scene, and style details that would help write a video script. Do not reduce a video or audio file to a transcript.` },
       ],
     },
   ] as any);
@@ -186,7 +201,12 @@ export async function extractAttachmentSections(
     return [{ text: buffer.toString('utf8'), pageNumber: null, section: 'Document' }];
   }
   const visualText = await extractWithVision(buffer, mimeType, userId, attachmentId);
-  return [{ text: visualText, pageNumber: null, section: 'Image' }];
+  const section = mimeType.startsWith('video/')
+    ? 'Video multimodal analysis'
+    : mimeType.startsWith('audio/')
+      ? 'Audio multimodal analysis'
+      : 'Image multimodal analysis';
+  return [{ text: visualText, pageNumber: null, section }];
 }
 
 export function buildAttachmentChunks(

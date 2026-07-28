@@ -1,6 +1,8 @@
 import { ConvexError, v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import { logger } from '../lib/logger';
+import { resolveEditProposalStatus } from '../lib/script-editing/proposals';
+import type { EditProposal } from '../types/script-chat';
 
 const log = logger.child({ file: 'convex/scriptChats.ts' });
 
@@ -63,6 +65,7 @@ export const createSession = mutation({
     title: v.string(),
     editorContent: v.any(),
   },
+  returns: v.any(),
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
     const now = new Date().toISOString();
@@ -70,10 +73,19 @@ export const createSession = mutation({
       user_id: userId,
       title: args.title,
       editor_content: args.editorContent,
+      scheduled_date: now,
       created_at: now,
       updated_at: now,
     });
-    return await ctx.db.get(id);
+    const session = await ctx.db.get(id);
+    log.info('Created script chat session with default schedule date', {
+      userId,
+      action: 'create_script_chat_session',
+      sessionId: id,
+      scheduledDate: now,
+      statusCode: 200,
+    });
+    return session;
   },
 });
 
@@ -136,6 +148,55 @@ export const updateSessionTitle = mutation({
       updated_at: new Date().toISOString(),
     });
     return await ctx.db.get(args.sessionId);
+  },
+});
+
+export const updateSessionScheduleDate = mutation({
+  args: {
+    sessionId: v.id('script_chat_sessions'),
+    scheduledDate: v.string(),
+  },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    if (Number.isNaN(Date.parse(args.scheduledDate))) {
+      log.error('Rejected an invalid script schedule date', {
+        userId,
+        action: 'update_script_chat_schedule_date',
+        sessionId: args.sessionId,
+        scheduledDate: args.scheduledDate,
+        error: 'Invalid schedule date',
+        statusCode: 400,
+      });
+      throw new ConvexError('Invalid schedule date');
+    }
+
+    const session = await ctx.db.get(args.sessionId);
+    if (!session || session.user_id !== userId) {
+      log.error('Failed to find the script session for schedule update', {
+        userId,
+        action: 'update_script_chat_schedule_date',
+        sessionId: args.sessionId,
+        error: 'Chat session not found',
+        statusCode: 404,
+      });
+      throw new ConvexError('Chat session not found');
+    }
+
+    const updatedAt = new Date().toISOString();
+    await ctx.db.patch(args.sessionId, {
+      scheduled_date: args.scheduledDate,
+      updated_at: updatedAt,
+    });
+    const updatedSession = await ctx.db.get(args.sessionId);
+    log.info('Updated script schedule date', {
+      userId,
+      action: 'update_script_chat_schedule_date',
+      sessionId: args.sessionId,
+      scheduledDate: args.scheduledDate,
+      statusCode: 200,
+    });
+    return updatedSession;
   },
 });
 
@@ -273,6 +334,73 @@ export const updateMessageStatus = mutation({
       throw new ConvexError('Chat message not found');
     }
     await ctx.db.patch(args.messageId, { change_status: args.status });
+    return await ctx.db.get(args.messageId);
+  },
+});
+
+export const resolveEditProposal = mutation({
+  args: {
+    messageId: v.id('script_chat_messages'),
+    proposalIndex: v.number(),
+    status: v.union(v.literal('accepted'), v.literal('rejected')),
+  },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const message = await ctx.db.get(args.messageId);
+    if (!message || message.user_id !== userId) {
+      log.warn('Rejected edit proposal resolution for an unknown message', {
+        userId,
+        action: 'resolve_individual_edit_proposal',
+        messageId: args.messageId,
+        proposalIndex: args.proposalIndex,
+        status: args.status,
+        statusCode: 404,
+      });
+      throw new ConvexError('Chat message not found');
+    }
+
+    const proposals = Array.isArray(message.proposed_changes)
+      ? message.proposed_changes as EditProposal[]
+      : [];
+    let resolution;
+    try {
+      resolution = resolveEditProposalStatus(
+        proposals,
+        args.proposalIndex,
+        args.status,
+        userId,
+      );
+    } catch (error) {
+      log.warn('Rejected an invalid individual edit proposal resolution', {
+        userId,
+        action: 'resolve_individual_edit_proposal',
+        messageId: args.messageId,
+        proposalIndex: args.proposalIndex,
+        proposalCount: proposals.length,
+        status: args.status,
+        statusCode: 400,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new ConvexError(
+        error instanceof Error ? error.message : 'Invalid proposal resolution',
+      );
+    }
+
+    await ctx.db.patch(args.messageId, {
+      proposed_changes: resolution.proposals,
+      change_status: resolution.aggregateStatus,
+    });
+    log.info('Persisted an individual edit proposal resolution', {
+      userId,
+      action: 'resolve_individual_edit_proposal',
+      messageId: args.messageId,
+      proposalIndex: args.proposalIndex,
+      proposalCount: proposals.length,
+      status: args.status,
+      aggregateStatus: resolution.aggregateStatus,
+      statusCode: 200,
+    });
     return await ctx.db.get(args.messageId);
   },
 });
