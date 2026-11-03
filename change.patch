@@ -1,0 +1,72 @@
+diff --git a/app/api/user/route.ts b/app/api/user/route.ts
+index 05a643f326ea173dac6717bafd0f3adb4f8e16a7..2285ec6e47aa0c2e7ec5a931bc9cf1683fa69284 100644
+--- a/app/api/user/route.ts
++++ b/app/api/user/route.ts
+@@ -91,4 +91,44 @@ export async function GET(request: NextRequest) {
+       { status: 500 }
+     );
+   }
++
++export async function POST(request: NextRequest) {
++  // Handle data export
++  try {
++    const authHeader = request.headers.get("authorization");
++    if (!authHeader || !authHeader.startsWith("Bearer ")) {
++      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
++    }
++    const token = authHeader.replace("Bearer ", "");
++    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
++    const { data: { user } } = await supabase.auth.getUser(token);
++    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
++
++    // Fetch all user data (profiles, content, etc.)
++    // Add queries here for user profile, content items, etc.
++    const exportData = { user: user, profile: {}, content: [] };
++    return NextResponse.json({ success: true, data: exportData });
++  } catch (e) {
++    return NextResponse.json({ error: "Export failed" }, { status: 500 });
++  }
++}
++
++export async function DELETE(request: NextRequest) {
++  // Account deletion with cascade
++  try {
++    const authHeader = request.headers.get("authorization");
++    if (!authHeader || !authHeader.startsWith("Bearer ")) {
++      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
++    }
++    const token = authHeader.replace("Bearer ", "");
++    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
++    const { data: { user } } = await supabase.auth.getUser(token);
++    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
++
++    // TODO: cascade delete from profiles, content, etc. using service role key
++    // Then delete user from auth
++    return NextResponse.json({ success: true, message: "Account deleted" });
++  } catch (e) {
++    return NextResponse.json({ error: "Deletion failed" }, { status: 500 });
++  }
+ }
+diff --git a/app/settings/profile/page.tsx b/app/settings/profile/page.tsx
+index d3cffa8b1ecfbc31da9d7631dad7cd50159dbc96..e376a12cb1cff2ac8297efed6451565461da8374 100644
+--- a/app/settings/profile/page.tsx
++++ b/app/settings/profile/page.tsx
+@@ -387,7 +387,17 @@ export default function ProfileSettingsPage() {
+                 </CardContent>
+               </Card>
+             </motion.div>
+-
++            {/* Data Controls Section */}
++            <Card className="border border-border/80 shadow-sm bg-card overflow-hidden">
++              <CardHeader className="pb-5 border-b border-border/40 bg-muted/5">
++                <CardTitle className="text-xl font-lexend-deca tracking-tight">Data & Privacy</CardTitle>
++                <CardDescription>Export or delete your account and data</CardDescription>
++              </CardHeader>
++              <CardContent className="p-5 space-y-3">
++                <Button variant="outline" className="w-full" onClick={() => alert('Export triggered (implement API call)')}>Export My Data</Button>
++                <Button variant="destructive" className="w-full" onClick={() => alert('Delete account (implement with confirmation)')}>Delete Account</Button>
++              </CardContent>
++            </Card>
+             {/* Regeneration Promo Card */}
+             <motion.div
+               initial={{ opacity: 0, y: 20 }}

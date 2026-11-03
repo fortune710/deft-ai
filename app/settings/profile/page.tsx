@@ -387,7 +387,17 @@ export default function ProfileSettingsPage() {
                 </CardContent>
               </Card>
             </motion.div>
-
+            {/* Data Controls Section */}
+            <Card className="border border-border/80 shadow-sm bg-card overflow-hidden">
+              <CardHeader className="pb-5 border-b border-border/40 bg-muted/5">
+                <CardTitle className="text-xl font-lexend-deca tracking-tight">Data & Privacy</CardTitle>
+                <CardDescription>Export or delete your account and data</CardDescription>
+              </CardHeader>
+              <CardContent className="p-5 space-y-3">
+                <Button variant="outline" className="w-full" onClick={() => alert('Export triggered (implement API call)')}>Export My Data</Button>
+                <Button variant="destructive" className="w-full" onClick={() => alert('Delete account (implement with confirmation)')}>Delete Account</Button>
+              </CardContent>
+            </Card>
             {/* Regeneration Promo Card */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
