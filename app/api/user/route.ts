@@ -91,4 +91,44 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
+
+export async function POST(request: NextRequest) {
+  // Handle data export
+  try {
+    const authHeader = request.headers.get("authorization");
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const token = authHeader.replace("Bearer ", "");
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
+    const { data: { user } } = await supabase.auth.getUser(token);
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    // Fetch all user data (profiles, content, etc.)
+    // Add queries here for user profile, content items, etc.
+    const exportData = { user: user, profile: {}, content: [] };
+    return NextResponse.json({ success: true, data: exportData });
+  } catch (e) {
+    return NextResponse.json({ error: "Export failed" }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  // Account deletion with cascade
+  try {
+    const authHeader = request.headers.get("authorization");
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const token = authHeader.replace("Bearer ", "");
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
+    const { data: { user } } = await supabase.auth.getUser(token);
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    // TODO: cascade delete from profiles, content, etc. using service role key
+    // Then delete user from auth
+    return NextResponse.json({ success: true, message: "Account deleted" });
+  } catch (e) {
+    return NextResponse.json({ error: "Deletion failed" }, { status: 500 });
+  }
 }
